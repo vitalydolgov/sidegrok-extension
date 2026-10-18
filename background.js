@@ -142,21 +142,28 @@ function whiteMarkOn(color) {
   return (lum + 0.05) ** 2 <= 1.05 * 0.05;
 }
 
+// theme.getCurrent() returns the light colors only. Firefox paints dark_theme
+// when light/dark mode is dark, and theme.onUpdated does not fire for that
+// switch. This page's prefers-color-scheme follows it when website appearance
+// is automatic, and the change listener below re-reads it. Built-in Dark is
+// color_scheme "dark" with no colors, and built-in Light is color_scheme
+// "light" with no colors; neither follows that switch.
 function markForTheme(theme) {
-  const background = launcherBackground(theme && theme.colors);
-  if (background) {
-    return whiteMarkOn(background) ? WHITE_MARK : BLACK_MARK;
-  }
   const scheme = theme && theme.properties && theme.properties.color_scheme;
   if (scheme === "dark") {
     return WHITE_MARK;
   }
-  if (scheme === "light") {
+  const background = launcherBackground(theme && theme.colors);
+  if (scheme === "light" && !background) {
     return BLACK_MARK;
   }
-  return window.matchMedia("(prefers-color-scheme: dark)").matches
-    ? WHITE_MARK
-    : BLACK_MARK;
+  if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
+    return WHITE_MARK;
+  }
+  if (background) {
+    return whiteMarkOn(background) ? WHITE_MARK : BLACK_MARK;
+  }
+  return BLACK_MARK;
 }
 
 function refreshThemeIcon(windowId) {
