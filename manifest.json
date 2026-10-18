@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "SideGrok",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Unofficial sidebar for Grok. Not affiliated with or endorsed by SpaceXAI.",
   "browser_specific_settings": {
     "gecko": {
