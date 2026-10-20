@@ -56,19 +56,12 @@ function ensureOffsetStyle() {
   const style = document.createElement("style");
   style.id = "sidegrok-bot-offset";
   style.textContent = [
+    // Room for the picker only. Grok's own sidebar, widths, and media rules
+    // stay as they are on a page without this branch.
     'html[data-sidegrok="sidebar"] #grok-app-root {',
     "margin-top: " + PANEL_HEIGHT + " !important;",
     "height: calc(100vh - " + PANEL_HEIGHT + ") !important;",
     "max-height: calc(100vh - " + PANEL_HEIGHT + ") !important;",
-    "}",
-    // The desktop bot route keeps Grok's own sidebar open. In the drawer that
-    // column is about 256px and leaves the conversation an unreadable sliver.
-    'html[data-sidegrok="sidebar"] #grok-app-root > .peer {',
-    "display: none !important;",
-    "}",
-    'html[data-sidegrok="sidebar"] #grok-content-area {',
-    "width: 100% !important;",
-    "max-width: 100% !important;",
     "}",
   ].join("\n");
   document.documentElement.appendChild(style);
