@@ -182,7 +182,7 @@ function ensurePanel() {
   choice.className = "choice";
   choice.setAttribute("aria-haspopup", "listbox");
   choice.setAttribute("aria-expanded", "false");
-  choice.textContent = "Loading bots…";
+  choice.textContent = "Loading...";
   choice.addEventListener("click", function () {
     if (panelMenu.hidden) {
       panelMenu.hidden = false;
@@ -341,6 +341,7 @@ function optionLabel(bot) {
 }
 
 let roster = [];
+let rosterKnown = false;
 let navigating = false;
 
 function readRoster() {
@@ -374,27 +375,37 @@ function showChoice(active) {
     panelChoice.textContent = optionLabel(match);
     return;
   }
-  if (active) {
-    panelChoice.textContent = "This bot";
+  if (!roster.length) {
+    panelChoice.textContent = rosterKnown ? "No bots" : "Loading...";
     return;
   }
-  panelChoice.textContent = roster.length ? "Choose a bot" : "Loading bots…";
+  panelChoice.textContent = "Choose a bot";
 }
 
-function renderBots(bots) {
+function renderBots(bots, ready) {
   if (!panelChoice || !panelMenu) {
     return;
   }
   if (!bots.length) {
     const cached = roster.length ? roster : readRoster();
-    if (!cached.length) {
+    if (cached.length) {
+      bots = cached;
+    } else if (ready && !/^\/bot\//i.test(location.pathname || "")) {
+      roster = [];
+      rosterKnown = true;
+      showChoice(currentBotId());
+      panelMenu.replaceChildren();
+      panelMenu.dataset.bots = "";
+      panelMenu.dataset.active = "";
+      return;
+    } else {
       showChoice(currentBotId());
       return;
     }
-    bots = cached;
   } else {
     writeRoster(bots);
   }
+  rosterKnown = true;
   roster = bots;
   const active = currentBotId();
   const signature = bots
@@ -488,7 +499,7 @@ window.addEventListener("message", function (event) {
     return;
   }
   ensurePanel();
-  renderBots(data.bots);
+  renderBots(data.bots, data.ready === true);
 });
 
 document.addEventListener(

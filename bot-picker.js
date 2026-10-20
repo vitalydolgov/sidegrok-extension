@@ -1,5 +1,5 @@
 // Page world. Reads the in-memory bot roster and hands it to the isolated
-// content script, which owns the top panel. Grok's React tree drops nodes
+// content script, which owns the panel. Grok's React tree drops nodes
 // mounted inside its header.
 //
 // Firefox can hand this script an Xray wrapper of the page, which hides
@@ -68,7 +68,7 @@ function collectBots() {
   const host = doc && raw(doc.body);
   const key = reactKey(host);
   if (!key) {
-    return [];
+    return { bots: [], ready: false };
   }
   let fiber = raw(host[key]);
   const stateNode = fiber && raw(fiber.stateNode);
@@ -105,17 +105,18 @@ function collectBots() {
       hook = hook.next;
     }
   }
-  return best;
+  return { bots: best, ready: true };
 }
 
 function publish() {
   if (!isSidebar()) {
     return;
   }
+  const found = collectBots();
   window.postMessage(
     {
       source: "sidegrok-bots",
-      payload: JSON.stringify({ bots: collectBots() }),
+      payload: JSON.stringify({ bots: found.bots, ready: found.ready }),
     },
     location.origin
   );
