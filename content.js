@@ -18,6 +18,8 @@ let panelChoice = null;
 let panelLabel = null;
 let panelMenu = null;
 let schemeObserver = null;
+let hideBottomPanel = false;
+let hideBottomPanelKnown = false;
 
 const PANEL_HEIGHT = "44px";
 const ROSTER_KEY = "sidegrok-roster";
@@ -69,6 +71,13 @@ function ensureOffsetStyle() {
 }
 
 function ensurePanel() {
+  if (!hideBottomPanelKnown) {
+    return;
+  }
+  if (hideBottomPanel) {
+    removePanel();
+    return;
+  }
   if (panelHost && panelHost.isConnected) {
     return;
   }
@@ -529,6 +538,30 @@ document.addEventListener(
   },
   true
 );
+
+function syncBottomPanelSetting(hidden) {
+  hideBottomPanel = hidden === true;
+  hideBottomPanelKnown = true;
+  if (sidebarDocument) {
+    ensurePanel();
+  }
+}
+
+browser.storage.local.get(HIDE_BOTTOM_PANEL_KEY).then(
+  (stored) => {
+    syncBottomPanelSetting(stored[HIDE_BOTTOM_PANEL_KEY]);
+  },
+  () => {
+    syncBottomPanelSetting(false);
+  }
+);
+
+browser.storage.onChanged.addListener((changes, area) => {
+  if (area !== "local" || !Object.hasOwn(changes, HIDE_BOTTOM_PANEL_KEY)) {
+    return;
+  }
+  syncBottomPanelSetting(changes[HIDE_BOTTOM_PANEL_KEY].newValue);
+});
 
 reportPanelUrl(false);
 window.addEventListener("pageshow", () => reportPanelUrl(false));

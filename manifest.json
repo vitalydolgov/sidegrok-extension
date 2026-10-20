@@ -30,7 +30,7 @@
   "content_scripts": [
     {
       "matches": ["https://grok.com/*", "https://www.grok.com/*"],
-      "js": ["content.js"],
+      "js": ["panel-url.js", "content.js"],
       "run_at": "document_start"
     },
     {
