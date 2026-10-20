@@ -15,6 +15,7 @@ let timer = 0;
 let sidebarDocument = false;
 let panelHost = null;
 let panelChoice = null;
+let panelLabel = null;
 let panelMenu = null;
 let schemeObserver = null;
 
@@ -128,8 +129,8 @@ function ensurePanel() {
     ".mark svg .eye { fill: var(--panel); }",
     ".slot {",
     "  position: relative;",
-    "  flex: 0 0 100px;",
-    "  width: 100px;",
+    "  flex: 0 0 120px;",
+    "  width: 120px;",
     "  min-width: 0;",
     "  align-self: stretch;",
     "  display: flex;",
@@ -139,15 +140,22 @@ function ensurePanel() {
     "  width: 100%;",
     "  min-width: 0;",
     "  height: 28px;",
-    "  padding: 0 4px 0 0;",
+    "  padding: 0;",
+    "  display: flex;",
+    "  align-items: center;",
+    "  gap: 4px;",
     "  overflow: hidden;",
-    "  text-overflow: ellipsis;",
-    "  white-space: nowrap;",
     "  background: transparent;",
     "  border: 0;",
     "  outline: 0;",
     "  border-radius: 6px;",
     "  text-align: left;",
+    "}",
+    "button.choice .name {",
+    "  min-width: 0;",
+    "  overflow: hidden;",
+    "  text-overflow: ellipsis;",
+    "  white-space: nowrap;",
     "}",
     ".menu {",
     "  position: absolute;",
@@ -178,12 +186,15 @@ function ensurePanel() {
   mark.className = "mark";
   mark.setAttribute("aria-hidden", "true");
   mark.appendChild(botIcon());
+  const label = document.createElement("span");
+  label.className = "name";
+  label.textContent = "Loading...";
   const choice = document.createElement("button");
   choice.type = "button";
   choice.className = "choice";
   choice.setAttribute("aria-haspopup", "listbox");
   choice.setAttribute("aria-expanded", "false");
-  choice.textContent = "Loading...";
+  choice.append(mark, label);
   choice.addEventListener("click", function () {
     if (panelMenu.hidden) {
       panelMenu.hidden = false;
@@ -209,13 +220,14 @@ function ensurePanel() {
     openBot(button.dataset.id || "");
   });
   slot.append(choice, menu);
-  bar.append(mark, slot);
+  bar.append(slot);
   shadow.append(style, bar);
   document.documentElement.appendChild(host);
   panelHost = host;
   watchScheme();
   syncScheme();
   panelChoice = choice;
+  panelLabel = label;
   panelMenu = menu;
   const cached = readRoster();
   if (cached.length) {
@@ -329,6 +341,7 @@ function removePanel() {
     panelHost.remove();
     panelHost = null;
     panelChoice = null;
+    panelLabel = null;
     panelMenu = null;
   }
   const style = document.getElementById("sidegrok-bot-offset");
@@ -366,21 +379,21 @@ function writeRoster(bots) {
 }
 
 function showChoice(active) {
-  if (navigating || !panelChoice) {
+  if (navigating || !panelLabel) {
     return;
   }
   const match = roster.find(function (bot) {
     return bot.id === active;
   });
   if (match) {
-    panelChoice.textContent = optionLabel(match);
+    panelLabel.textContent = optionLabel(match);
     return;
   }
   if (!roster.length) {
-    panelChoice.textContent = rosterKnown ? "No bots" : "Loading...";
+    panelLabel.textContent = rosterKnown ? "No bots" : "Loading...";
     return;
   }
-  panelChoice.textContent = "Choose a bot";
+  panelLabel.textContent = "Choose...";
 }
 
 function renderBots(bots, ready) {
