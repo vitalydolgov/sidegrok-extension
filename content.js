@@ -5,7 +5,7 @@
 // This script also runs in ordinary grok.com tabs. The background tells those
 // documents to stop; only the sidebar should update the restored page.
 //
-// The bot list is a separate panel pinned to the top of the drawer. It is not
+// The bot list is a separate panel pinned to the bottom of the drawer. It is not
 // part of grok.com's header: that tree is owned by React and drops foreign
 // nodes. The roster itself is read in the page world (bot-picker.js).
 
@@ -16,6 +16,7 @@ let sidebarDocument = false;
 let panelHost = null;
 let panelChoice = null;
 let panelMenu = null;
+let schemeObserver = null;
 
 const PANEL_HEIGHT = "44px";
 const ROSTER_KEY = "sidegrok-roster";
@@ -59,7 +60,6 @@ function ensureOffsetStyle() {
     // Room for the picker only. Grok's own sidebar, widths, and media rules
     // stay as they are on a page without this branch.
     'html[data-sidegrok="sidebar"] #grok-app-root {',
-    "margin-top: " + PANEL_HEIGHT + " !important;",
     "height: calc(100vh - " + PANEL_HEIGHT + ") !important;",
     "max-height: calc(100vh - " + PANEL_HEIGHT + ") !important;",
     "}",
@@ -78,7 +78,7 @@ function ensurePanel() {
     "all: initial",
     "position: fixed",
     "z-index: 2147483647",
-    "top: 0",
+    "bottom: 0",
     "left: 0",
     "right: 0",
     "height: " + PANEL_HEIGHT,
@@ -95,38 +95,59 @@ function ensurePanel() {
     "  align-items: center;",
     "  gap: 8px;",
     "  padding: 0 10px;",
-    "  background: #111;",
+    "  background: #171716;",
     "  color: #f5f5f5;",
     '  font: 13px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;',
-    "  border-bottom: 1px solid #333;",
+    "  border-top: 1px solid #333;",
     "}",
     "button {",
     "  font: inherit;",
     "  color: inherit;",
     "  cursor: pointer;",
     "}",
+    ".mark {",
+    "  flex: 0 0 auto;",
+    "  width: 16px;",
+    "  height: 16px;",
+    "  display: block;",
+    "}",
+    ".mark svg { width: 16px; height: 16px; display: block; }",
+    ".mark svg .body { fill: currentColor; }",
+    ".mark svg .eye { fill: #171716; }",
+    ".slot {",
+    "  position: relative;",
+    "  flex: 0 0 33.333%;",
+    "  width: 33.333%;",
+    "  min-width: 0;",
+    "  align-self: stretch;",
+    "  display: flex;",
+    "  align-items: center;",
+    "}",
     "button.choice {",
-    "  flex: 1;",
+    "  width: 100%;",
     "  min-width: 0;",
     "  height: 28px;",
     "  padding: 0 8px;",
-    "  background: #1c1c1c;",
-    "  border: 1px solid #444;",
+    "  overflow: hidden;",
+    "  text-overflow: ellipsis;",
+    "  white-space: nowrap;",
+    "  background: transparent;",
+    "  border: 1px solid #333;",
     "  border-radius: 6px;",
     "  text-align: left;",
     "}",
     ".menu {",
     "  position: absolute;",
-    "  top: " + PANEL_HEIGHT + ";",
+    "  bottom: 100%;",
     "  left: 0;",
     "  right: 0;",
     "  max-height: 280px;",
     "  overflow: auto;",
-    "  background: #161616;",
+    "  background: #171716;",
     "  color: #f5f5f5;",
     '  font: 13px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;',
-    "  border-bottom: 1px solid #333;",
-    "  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);",
+    "  border-top: 1px solid #333;",
+    "  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.35);",
     "}",
     ".menu button {",
     "  display: block;",
@@ -137,11 +158,27 @@ function ensurePanel() {
     "  text-align: left;",
     "}",
     ".menu button:hover, .menu button[aria-selected='true'] { background: #2a2a2a; }",
+    ":host([data-scheme='light']) .bar {",
+    "  background: #f4f1f0;",
+    "  color: #171717;",
+    "  border-top-color: #e4dfdd;",
+    "}",
+    ":host([data-scheme='light']) button.choice { border-color: #e4dfdd; }",
+    ":host([data-scheme='light']) .mark svg .eye { fill: #f4f1f0; }",
+    ":host([data-scheme='light']) .menu {",
+    "  background: #f4f1f0;",
+    "  color: #171717;",
+    "  border-top-color: #e4dfdd;",
+    "}",
+    ":host([data-scheme='light']) .menu button:hover,",
+    ":host([data-scheme='light']) .menu button[aria-selected='true'] { background: #e7e2e0; }",
   ].join("\n");
   const bar = document.createElement("div");
   bar.className = "bar";
-  const label = document.createElement("span");
-  label.textContent = "Bots";
+  const mark = document.createElement("span");
+  mark.className = "mark";
+  mark.setAttribute("aria-hidden", "true");
+  mark.appendChild(botIcon());
   const choice = document.createElement("button");
   choice.type = "button";
   choice.className = "choice";
@@ -156,6 +193,8 @@ function ensurePanel() {
       closeMenu();
     }
   });
+  const slot = document.createElement("div");
+  slot.className = "slot";
   const menu = document.createElement("div");
   menu.className = "menu";
   menu.hidden = true;
@@ -170,10 +209,13 @@ function ensurePanel() {
     // setPanel while the panel is open would reload the sidebar a second time.
     openBot(button.dataset.id || "");
   });
-  bar.append(label, choice);
-  shadow.append(style, bar, menu);
+  slot.append(choice, menu);
+  bar.append(mark, slot);
+  shadow.append(style, bar);
   document.documentElement.appendChild(host);
   panelHost = host;
+  watchScheme();
+  syncScheme();
   panelChoice = choice;
   panelMenu = menu;
   const cached = readRoster();
@@ -190,6 +232,80 @@ function closeMenu() {
   if (panelChoice) {
     panelChoice.setAttribute("aria-expanded", "false");
   }
+}
+
+function botIcon() {
+  const ns = "http://www.w3.org/2000/svg";
+  const shape = "M228.541 114.228C228.541 130.133 225.184 145.994 218.738 160.534C212.674 174.217 203.904 186.669 193.065 196.988C155.933 232.34 99.497 238.596 55.5255 212.24C45.097 205.99 35.6851 198.072 27.7451 188.866C19.1926 178.953 12.3686 167.569 7.65781 155.351C2.60712 142.264 0 128.257 0 114.228C0 98.3219 3.35751 82.4611 9.80315 67.9215C15.8672 54.2382 24.6377 41.7862 35.4767 31.4668C72.6081 -3.88483 129.044 -10.1413 173.016 16.2153C183.444 22.4653 192.856 30.3829 200.796 39.5896C209.349 49.5018 216.173 60.8859 220.883 73.1037C225.934 86.1906 228.541 100.198 228.541 114.228Z";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "-15 -15 259 259");
+  svg.setAttribute("aria-hidden", "true");
+  const clip = document.createElementNS(ns, "clipPath");
+  clip.setAttribute("id", "sidegrok-bot-clip");
+  const clipShape = document.createElementNS(ns, "path");
+  clipShape.setAttribute("d", shape);
+  clip.appendChild(clipShape);
+  const defs = document.createElementNS(ns, "defs");
+  defs.appendChild(clip);
+  svg.appendChild(defs);
+  const body = document.createElementNS(ns, "path");
+  body.setAttribute("class", "body");
+  body.setAttribute("d", shape);
+  svg.appendChild(body);
+  const eyes = document.createElementNS(ns, "g");
+  eyes.setAttribute("clip-path", "url(#sidegrok-bot-clip)");
+  for (const d of [
+    "M130.36 45.98L132.71 46.19L134.98 46.81L137.11 47.83L138.97 49.28L140.47 51.09L141.68 53.12L142.73 55.23L143.76 57.36L144.78 59.49L145.79 61.62L146.79 63.76L147.76 65.91L148.71 68.07L149.63 70.25L150.52 72.43L151.37 74.63L151.99 76.91L152.10 79.26L151.64 81.57L150.59 83.68L149.04 85.45L147.10 86.78L144.90 87.62L142.56 87.93L140.22 87.71L137.98 86.99L135.93 85.82L134.17 84.24L132.78 82.34L131.69 80.25L130.77 78.08L129.87 75.89L128.94 73.72L128.00 71.56L127.03 69.40L126.05 67.26L125.05 65.12L124.03 62.99L122.93 60.90L121.87 58.79L121.03 56.59L120.72 54.26L121.10 51.93L122.15 49.83L123.75 48.10L125.76 46.89L128.01 46.19Z",
+    "M176.61 37.08L178.72 37.59L180.70 38.48L182.52 39.65L184.20 41.03L185.71 42.59L187.03 44.31L188.20 46.14L189.26 48.03L190.27 49.96L191.26 51.89L192.23 53.84L193.16 55.80L194.05 57.78L194.92 59.77L195.74 61.78L196.53 63.80L197.27 65.84L197.97 67.90L198.47 70.01L198.63 72.18L198.40 74.33L197.58 76.33L195.95 77.72L193.83 78.08L191.71 77.65L189.76 76.69L188.03 75.38L186.53 73.82L185.28 72.05L184.25 70.13L183.40 68.14L182.63 66.11L181.87 64.07L181.07 62.05L180.25 60.04L179.39 58.05L178.49 56.07L177.57 54.10L176.61 52.15L175.62 50.22L174.59 48.31L173.53 46.41L172.54 44.48L171.86 42.42L171.76 40.26L172.62 38.30L174.45 37.19Z",
+  ]) {
+    const eye = document.createElementNS(ns, "path");
+    eye.setAttribute("class", "eye");
+    eye.setAttribute("d", d);
+    eyes.appendChild(eye);
+  }
+  svg.appendChild(eyes);
+  return svg;
+}
+
+function pageScheme() {
+  const root = document.documentElement;
+  if (!root) {
+    return "dark";
+  }
+  // Grok keeps scheme-light in the class list and adds dark for its dark theme.
+  if (root.classList.contains("dark")) {
+    return "dark";
+  }
+  if (root.classList.contains("scheme-light") || root.style.colorScheme === "light") {
+    return "light";
+  }
+  try {
+    if (window.matchMedia("(prefers-color-scheme: light)").matches) {
+      return "light";
+    }
+  } catch (error) {}
+  return "dark";
+}
+
+function syncScheme() {
+  if (!panelHost) {
+    return;
+  }
+  panelHost.dataset.scheme = pageScheme();
+}
+
+function watchScheme() {
+  if (schemeObserver || !document.documentElement) {
+    return;
+  }
+  schemeObserver = new MutationObserver(syncScheme);
+  schemeObserver.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ["class", "style"],
+  });
+  try {
+    window.matchMedia("(prefers-color-scheme: light)").addEventListener("change", syncScheme);
+  } catch (error) {}
 }
 
 function openBot(id) {
