@@ -1,9 +1,11 @@
-// Grok's /bot/<id> route mounts an empty shell when the viewport is under
-// the md breakpoint, 768px. The drawer is about 340px wide, so a full load
-// of a bot page paints nothing and the picker has no roster to show.
-// The desktop tree still shows the conversation after the drawer is narrowed,
-// so script checks during that load are told the window is desktop-sized.
-// CSS media queries are left alone.
+// A full load of /bot/<id> paints an empty shell in the drawer.
+// The route's script checks follow the md breakpoint, 768px, and the drawer
+// is about 340px wide. The page also stays blank until the bot roster has
+// loaded, and that load starts only while Grok's own sidebar is expanded.
+// The drawer keeps that sidebar collapsed. Script checks during this load
+// are told the window is desktop-sized and the sidebar is expanded. The
+// saved collapsed value is left in storage. CSS media queries are left alone,
+// and the offset style hides Grok's sidebar column.
 
 (function () {
   if (!/^\/bot\//i.test(location.pathname || "")) {
@@ -67,5 +69,26 @@
         return desktop;
       },
     });
+  } catch (error) {}
+
+  // Firefox ignores an own-property replacement of localStorage.getItem.
+  // The prototype is shared with sessionStorage, so only this document's
+  // localStorage is answered.
+  try {
+    const storage = window.localStorage;
+    const realGetItem = Storage.prototype.getItem;
+    const realSetItem = Storage.prototype.setItem;
+    Storage.prototype.getItem = function (key) {
+      if (this === storage && key === "sidebarOpen") {
+        return "true";
+      }
+      return realGetItem.call(this, key);
+    };
+    Storage.prototype.setItem = function (key, value) {
+      if (this === storage && key === "sidebarOpen") {
+        return;
+      }
+      return realSetItem.call(this, key, value);
+    };
   } catch (error) {}
 })();

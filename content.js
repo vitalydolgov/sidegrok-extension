@@ -16,7 +16,6 @@ let sidebarDocument = false;
 let panelHost = null;
 let panelChoice = null;
 let panelMenu = null;
-let chosenId = "";
 
 const PANEL_HEIGHT = "44px";
 const ROSTER_KEY = "sidegrok-roster";
@@ -202,13 +201,19 @@ function closeMenu() {
 
 function openBot(id) {
   closeMenu();
-  if (!id || id === currentBotId()) {
+  if (!id || id === currentBotId() || navigating) {
     return;
   }
-  chosenId = id;
-  showChoice(id);
+  // The roster is published again while this document is still visible, and
+  // the URL can move before the next page paints. Either one would rename the
+  // button to a bot that this page has not opened yet.
+  navigating = true;
   const url = new URL("/bot/" + encodeURIComponent(id), location.origin).href;
-  location.assign(url);
+  try {
+    location.assign(url);
+  } catch (error) {
+    navigating = false;
+  }
 }
 
 function removePanel() {
@@ -229,6 +234,7 @@ function optionLabel(bot) {
 }
 
 let roster = [];
+let navigating = false;
 
 function readRoster() {
   try {
@@ -250,17 +256,8 @@ function writeRoster(bots) {
   } catch (error) {}
 }
 
-function displayedBotId() {
-  const fromUrl = currentBotId();
-  if (fromUrl) {
-    chosenId = "";
-    return fromUrl;
-  }
-  return chosenId;
-}
-
 function showChoice(active) {
-  if (!panelChoice) {
+  if (navigating || !panelChoice) {
     return;
   }
   const match = roster.find(function (bot) {
@@ -284,7 +281,7 @@ function renderBots(bots) {
   if (!bots.length) {
     const cached = roster.length ? roster : readRoster();
     if (!cached.length) {
-      showChoice(displayedBotId());
+      showChoice(currentBotId());
       return;
     }
     bots = cached;
@@ -292,7 +289,7 @@ function renderBots(bots) {
     writeRoster(bots);
   }
   roster = bots;
-  const active = displayedBotId();
+  const active = currentBotId();
   const signature = bots
     .map(function (bot) {
       return bot.id + "\0" + optionLabel(bot);
