@@ -32,6 +32,18 @@
       "matches": ["https://grok.com/*", "https://www.grok.com/*"],
       "js": ["content.js"],
       "run_at": "document_start"
+    },
+    {
+      "matches": ["https://grok.com/*", "https://www.grok.com/*"],
+      "js": ["bot-viewport.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["https://grok.com/*", "https://www.grok.com/*"],
+      "js": ["bot-picker.js"],
+      "run_at": "document_idle",
+      "world": "MAIN"
     }
   ],
   "sidebar_action": {
