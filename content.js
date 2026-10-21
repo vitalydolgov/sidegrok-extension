@@ -60,8 +60,7 @@ function ensureOffsetStyle() {
   const style = document.createElement("style");
   style.id = "sidegrok-bot-offset";
   style.textContent = [
-    // Room for the picker only. Grok's own sidebar, widths, and media rules
-    // stay as they are on a page without this branch.
+    // The strip is position:fixed, so the page has to shrink or the strip covers it.
     'html[data-sidegrok="sidebar"] #grok-app-root {',
     "height: calc(100vh - " + PANEL_HEIGHT + ") !important;",
     "max-height: calc(100vh - " + PANEL_HEIGHT + ") !important;",
@@ -223,9 +222,6 @@ function ensurePanel() {
     if (!button || !menu.contains(button)) {
       return;
     }
-    // Native <select> in this shadow root commits, then Firefox snaps the
-    // value back to the placeholder, so the change handler never keeps an id.
-    // setPanel while the panel is open would reload the sidebar a second time.
     openBot(button.dataset.id || "");
   });
   slot.append(choice, menu);
@@ -405,7 +401,7 @@ function showChoice(active) {
   panelLabel.textContent = "Choose...";
 }
 
-function renderBots(bots, ready) {
+function renderBots(bots, settled) {
   if (!panelChoice || !panelMenu) {
     return;
   }
@@ -413,7 +409,7 @@ function renderBots(bots, ready) {
     const cached = roster.length ? roster : readRoster();
     if (cached.length) {
       bots = cached;
-    } else if (ready && !/^\/bot\//i.test(location.pathname || "")) {
+    } else if (settled) {
       roster = [];
       rosterKnown = true;
       showChoice(currentBotId());
@@ -522,7 +518,7 @@ window.addEventListener("message", function (event) {
     return;
   }
   ensurePanel();
-  renderBots(data.bots, data.ready === true);
+  renderBots(data.bots, data.settled === true);
 });
 
 document.addEventListener(

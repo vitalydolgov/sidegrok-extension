@@ -1,8 +1,6 @@
 // Choosing a bot full-loads /bot/<id> in the drawer. That route stays empty
 // until the bot roster has loaded, and Grok starts that load only while its
-// own sidebar is expanded. The drawer does not change that sidebar, the
-// viewport, or stored sidebar state: those stay as they are on main. This
-// script only starts the roster load, and only in the drawer.
+// own sidebar is expanded. This script starts that load in the drawer.
 
 (function () {
   const marker = 'name:"useBotsStore"';
@@ -22,6 +20,60 @@
       store.getState().bootstrap();
     } catch (error) {
       started = false;
+    }
+    publishRoster();
+  }
+
+  // The page walk can see the React fiber before any agent is mounted.
+  // rosterLoaded is the store's own finished signal, including an empty list.
+  let watched = false;
+
+  function publishRoster() {
+    const root = document.documentElement;
+    if (!store || !root || root.dataset.sidegrok !== "sidebar") {
+      return;
+    }
+    let state;
+    try {
+      state = store.getState();
+    } catch (error) {
+      return;
+    }
+    if (!state || state.rosterLoaded !== true || !Array.isArray(state.agents)) {
+      return;
+    }
+    const bots = [];
+    for (let index = 0; index < state.agents.length; index += 1) {
+      const agent = state.agents[index];
+      if (!agent || typeof agent.agentId !== "string" || typeof agent.name !== "string") {
+        continue;
+      }
+      bots.push({
+        id: agent.agentId,
+        name: agent.name,
+        hidden: agent.hiddenFromSidebar === true,
+      });
+    }
+    try {
+      window.postMessage(
+        {
+          source: "sidegrok-bots",
+          payload: JSON.stringify({ bots: bots, settled: true }),
+        },
+        location.origin
+      );
+    } catch (error) {}
+  }
+
+  function watchRoster() {
+    if (watched || typeof store.subscribe !== "function") {
+      return;
+    }
+    watched = true;
+    try {
+      store.subscribe(publishRoster);
+    } catch (error) {
+      watched = false;
     }
   }
 
@@ -48,6 +100,7 @@
       return;
     }
     store = found;
+    watchRoster();
   }
 
   function wrap(factory) {
