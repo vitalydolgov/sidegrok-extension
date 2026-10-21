@@ -24,6 +24,13 @@
       "height: calc(100vh - " + PANEL_HEIGHT + ") !important;",
       "max-height: calc(100vh - " + PANEL_HEIGHT + ") !important;",
       "}",
+      // A project chat sizes its column with h-dvh, which is the whole viewport
+      // and ignores the shortened app root. The composer is then pinned to that
+      // column and slides under the strip. Grok's own collapsed sidebar is also
+      // h-dvh, but it is not w-full, and forcing its height would open it.
+      'html[data-sidegrok="sidebar"] .h-dvh.w-full {',
+      "height: calc(100dvh - " + PANEL_HEIGHT + ") !important;",
+      "}",
     ].join("\n");
     document.documentElement.appendChild(style);
   }
