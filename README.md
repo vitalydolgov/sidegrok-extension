@@ -1,6 +1,6 @@
 # SideGrok
 
-The built-in sidebar chatbot does not include Grok. This extension tries to compensate with a sidebar button.
+The built-in sidebar chatbot does not support Grok. This extension adds a sidebar button so you can open Grok directly, along with a bottom panel for quickly switching between bots.
 
 Requires Firefox 142 or newer.
 
