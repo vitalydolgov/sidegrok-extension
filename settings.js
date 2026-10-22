@@ -2,6 +2,8 @@ var GROK_HOME = "https://grok.com/";
 var PANEL_URL_KEY = "panelUrl";
 // Absent or any value other than false keeps the sidebar shortcut.
 var SHORTCUT_ENABLED_KEY = "shortcutEnabled";
+// Absent or false leaves the bot picker visible at the bottom of the drawer.
+var HIDE_BOTTOM_PANEL_KEY = "hideBottomPanel";
 
 // Firefox drops the sidebar document when the panel closes and loads
 // sidebarAction's panel URL the next time it opens. Only the Grok app on

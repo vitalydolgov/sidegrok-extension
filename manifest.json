@@ -14,7 +14,7 @@
   },
   "permissions": ["storage"],
   "options_ui": {
-    "page": "options.html"
+    "page": "preferences.html"
   },
   "commands": {
     "toggle-sidebar": {
@@ -25,13 +25,19 @@
     }
   },
   "background": {
-    "scripts": ["panel-url.js", "background.js"]
+    "scripts": ["settings.js", "extension.js"]
   },
   "content_scripts": [
     {
       "matches": ["https://grok.com/*", "https://www.grok.com/*"],
-      "js": ["content.js"],
+      "js": ["settings.js", "bot-picker.js", "panel.js"],
       "run_at": "document_start"
+    },
+    {
+      "matches": ["https://grok.com/*", "https://www.grok.com/*"],
+      "js": ["roster.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
     }
   ],
   "sidebar_action": {
