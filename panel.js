@@ -31,6 +31,11 @@
       'html[data-sidegrok="sidebar"] .h-dvh.w-full {',
       "height: calc(100dvh - " + PANEL_HEIGHT + ") !important;",
       "}",
+      // Signed out, the legal footer is fixed to the viewport bottom. Shortening
+      // the app root does not move it, so the strip covers the terms line.
+      'html[data-sidegrok="sidebar"] footer.fixed.bottom-4 {',
+      "transform: translateY(-" + PANEL_HEIGHT + ") !important;",
+      "}",
     ].join("\n");
     document.documentElement.appendChild(style);
   }
