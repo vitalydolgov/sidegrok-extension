@@ -366,6 +366,12 @@ var unmountBotPicker;
         paint();
         return;
       }
+    } else if (!layout && !rosterKnown) {
+      // The first fiber list has no layout. Take groups from the cache
+      // before writeRoster replaces it.
+      const cached = readRoster();
+      nextPinned = cached.pinned;
+      nextSections = cached.sections;
     }
     if (layout) {
       nextPinned = idRows(layout.pinned);
