@@ -288,10 +288,14 @@ var unmountBotPicker;
     }
     const active = currentBotId();
     showChoice(active);
+    // An empty roster is still loading, or the account has no bots.
+    // Either way the menu has nothing to show, so the button stays shut.
+    choice.disabled = !roster.length;
     if (!roster.length) {
       menu.replaceChildren();
       menu.dataset.bots = "";
       menu.dataset.active = "";
+      closeMenu();
       return;
     }
     const groups = menuGroups();
@@ -453,6 +457,7 @@ var unmountBotPicker;
       "  color: inherit;",
       "  cursor: pointer;",
       "}",
+      "button.choice:disabled { cursor: default; }",
       ".mark {",
       "  flex: 0 0 auto;",
       "  width: 16px;",
@@ -557,10 +562,15 @@ var unmountBotPicker;
     const button = document.createElement("button");
     button.type = "button";
     button.className = "choice";
+    button.disabled = true;
     button.setAttribute("aria-haspopup", "listbox");
     button.setAttribute("aria-expanded", "false");
     button.append(mark, name);
     button.addEventListener("click", function () {
+      if (button.disabled || !roster.length) {
+        closeMenu();
+        return;
+      }
       if (menu.hidden) {
         menu.hidden = false;
         button.setAttribute("aria-expanded", "true");
