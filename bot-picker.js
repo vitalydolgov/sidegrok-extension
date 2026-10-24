@@ -316,11 +316,13 @@ var unmountBotPicker;
     }
     menu.replaceChildren();
     for (const group of groups) {
+      const section = document.createElement("div");
+      section.className = "section";
       if (group.title) {
         const heading = document.createElement("div");
         heading.className = "group";
         heading.textContent = group.title;
-        menu.appendChild(heading);
+        section.appendChild(heading);
       }
       for (const bot of group.bots) {
         const button = document.createElement("button");
@@ -331,8 +333,9 @@ var unmountBotPicker;
         if (bot.id === active) {
           button.setAttribute("aria-selected", "true");
         }
-        menu.appendChild(button);
+        section.appendChild(button);
       }
+      menu.appendChild(section);
     }
     menu.dataset.bots = signature;
     menu.dataset.active = active;
@@ -415,16 +418,19 @@ var unmountBotPicker;
       ":host {",
       "  --panel: #171716;",
       "  --ink: #f5f5f5;",
+      "  --muted: #8d8d8a;",
       "  --line: #333;",
       "  --hover: #2a2a2a;",
       "}",
       ":host([data-scheme='light']) {",
       "  --panel: #f4f1f0;",
       "  --ink: #171717;",
+      "  --muted: #736e6b;",
       "  --line: #e4dfdd;",
       "  --hover: #e7e2e0;",
       "}",
       ".bar {",
+      "  position: relative;",
       "  box-sizing: border-box;",
       "  height: 100%;",
       "  display: flex;",
@@ -482,35 +488,56 @@ var unmountBotPicker;
       "}",
       ".menu {",
       "  position: absolute;",
+      "  left: 10px;",
       "  bottom: 100%;",
-      "  left: 0;",
-      "  right: 0;",
-      "  max-height: 280px;",
+      "  width: min(200px, calc(100% - 20px));",
+      "  box-sizing: border-box;",
+      "  max-height: min(420px, calc(100dvh - 52px));",
       "  overflow: auto;",
+      "  overscroll-behavior: contain;",
+      "  scrollbar-width: thin;",
+      "  scrollbar-color: var(--line) transparent;",
+      "  padding: 4px;",
       "  background: var(--panel);",
       "  color: var(--ink);",
       '  font: 13px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;',
-      "  border-top: 1px solid var(--line);",
-      "  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.35);",
+      "  border: 1px solid var(--line);",
+      "  border-bottom: 0;",
+      "  border-radius: 10px 10px 0 0;",
+      "  box-shadow: 0 -10px 28px rgba(0, 0, 0, 0.28);",
+      "}",
+      ".section {",
+      "  display: flex;",
+      "  flex-direction: column;",
+      "}",
+      ".section + .section {",
+      "  margin-top: 6px;",
       "}",
       ".menu .group {",
-      "  padding: 8px 10px 2px;",
+      "  padding: 6px 8px 2px;",
       "  overflow: hidden;",
       "  font-size: 11px;",
+      "  font-weight: 600;",
       "  line-height: 1.2;",
+      "  letter-spacing: 0.04em;",
       "  white-space: nowrap;",
       "  text-overflow: ellipsis;",
-      "  opacity: 0.55;",
+      "  color: var(--muted);",
       "}",
       ".menu button {",
       "  display: block;",
       "  width: 100%;",
-      "  padding: 8px 10px;",
+      "  padding: 6px 8px;",
+      "  overflow: hidden;",
+      "  white-space: nowrap;",
+      "  text-overflow: ellipsis;",
       "  background: transparent;",
       "  border: 0;",
+      "  border-radius: 6px;",
       "  text-align: left;",
       "}",
       ".menu button:hover, .menu button[aria-selected='true'] { background: var(--hover); }",
+      ".menu button[aria-selected='true'] { font-weight: 600; }",
     ].join("\n");
     const bar = document.createElement("div");
     bar.className = "bar";
@@ -548,8 +575,8 @@ var unmountBotPicker;
       }
       openBot(item.dataset.id || "");
     });
-    slot.append(button, list);
-    bar.append(slot);
+    slot.append(button);
+    bar.append(slot, list);
     shadow.append(style, bar);
     choice = button;
     label = name;
