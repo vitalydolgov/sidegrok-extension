@@ -12,6 +12,8 @@ var unmountBotPicker;
   let host = null;
   let schemeObserver = null;
   let roster = [];
+  let pinned = [];
+  let sections = [];
   let rosterKnown = false;
   let navigating = false;
 
@@ -127,24 +129,139 @@ var unmountBotPicker;
     return bot.hidden ? bot.name + " (hidden)" : bot.name;
   }
 
+  function botRows(value) {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    return value.filter(function (bot) {
+      return bot && typeof bot.id === "string" && typeof bot.name === "string";
+    });
+  }
+
+  function idRows(value) {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    const ids = [];
+    const seen = new Set();
+    for (const id of value) {
+      if (typeof id !== "string" || !id || seen.has(id)) {
+        continue;
+      }
+      seen.add(id);
+      ids.push(id);
+    }
+    return ids;
+  }
+
+  function sectionRows(value) {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    const rows = [];
+    const seen = new Set();
+    for (const section of value) {
+      if (!section || typeof section.id !== "string") {
+        continue;
+      }
+      const id = section.id.trim();
+      if (!id || id === "__agents__" || seen.has(id)) {
+        continue;
+      }
+      seen.add(id);
+      rows.push({
+        id: id,
+        name: typeof section.name === "string" ? section.name : "",
+        agentIds: idRows(section.agentIds),
+      });
+    }
+    return rows;
+  }
+
   function readRoster() {
     try {
       const parsed = JSON.parse(sessionStorage.getItem(ROSTER_KEY) || "null");
-      if (!Array.isArray(parsed)) {
-        return [];
+      if (Array.isArray(parsed)) {
+        return { bots: botRows(parsed), pinned: [], sections: [] };
       }
-      return parsed.filter(function (bot) {
-        return bot && typeof bot.id === "string" && typeof bot.name === "string";
-      });
-    } catch (error) {
-      return [];
-    }
+      if (parsed && typeof parsed === "object") {
+        return {
+          bots: botRows(parsed.bots),
+          pinned: idRows(parsed.pinned),
+          sections: sectionRows(parsed.sections),
+        };
+      }
+    } catch (error) {}
+    return { bots: [], pinned: [], sections: [] };
   }
 
-  function writeRoster(bots) {
+  function writeRoster() {
     try {
-      sessionStorage.setItem(ROSTER_KEY, JSON.stringify(bots));
+      sessionStorage.setItem(
+        ROSTER_KEY,
+        JSON.stringify({ bots: roster, pinned: pinned, sections: sections })
+      );
     } catch (error) {}
+  }
+
+  // Pinned bots are not repeated in their section. Bots left over are Unassigned.
+  // With no pins and no named sections the list stays flat.
+  function menuGroups() {
+    const byId = new Map();
+    const order = [];
+    for (const bot of roster) {
+      if (!bot || typeof bot.id !== "string" || typeof bot.name !== "string" || byId.has(bot.id)) {
+        continue;
+      }
+      byId.set(bot.id, bot);
+      order.push(bot);
+    }
+    const used = new Set();
+    function take(ids) {
+      const bots = [];
+      for (const id of ids) {
+        if (used.has(id)) {
+          continue;
+        }
+        const bot = byId.get(id);
+        if (!bot) {
+          continue;
+        }
+        used.add(id);
+        bots.push(bot);
+      }
+      return bots;
+    }
+    const pinnedBots = take(pinned);
+    const named = [];
+    for (const section of sections) {
+      const bots = take(section.agentIds);
+      if (!bots.length) {
+        continue;
+      }
+      named.push({ title: section.name.trim() || "Untitled", bots: bots });
+    }
+    const rest = [];
+    for (const bot of order) {
+      if (used.has(bot.id)) {
+        continue;
+      }
+      rest.push(bot);
+    }
+    if (!pinnedBots.length && !named.length) {
+      return [{ title: "", bots: rest }];
+    }
+    const groups = [];
+    if (pinnedBots.length) {
+      groups.push({ title: "Pinned", bots: pinnedBots });
+    }
+    for (const group of named) {
+      groups.push(group);
+    }
+    if (rest.length) {
+      groups.push({ title: "Unassigned", bots: rest });
+    }
+    return groups;
   }
 
   function showChoice(active) {
@@ -177,11 +294,20 @@ var unmountBotPicker;
       menu.dataset.active = "";
       return;
     }
-    const signature = roster
-      .map(function (bot) {
-        return bot.id + "\0" + optionLabel(bot);
+    const groups = menuGroups();
+    const signature = groups
+      .map(function (group) {
+        return (
+          group.title +
+          "\0" +
+          group.bots
+            .map(function (bot) {
+              return bot.id + "\0" + optionLabel(bot);
+            })
+            .join("\n")
+        );
       })
-      .join("\n");
+      .join("\n\n");
     if (menu.dataset.bots === signature && menu.dataset.active === active) {
       return;
     }
@@ -189,33 +315,47 @@ var unmountBotPicker;
       return;
     }
     menu.replaceChildren();
-    const seen = new Set();
-    for (const bot of roster) {
-      if (!bot || typeof bot.id !== "string" || typeof bot.name !== "string" || seen.has(bot.id)) {
-        continue;
+    for (const group of groups) {
+      if (group.title) {
+        const heading = document.createElement("div");
+        heading.className = "group";
+        heading.textContent = group.title;
+        menu.appendChild(heading);
       }
-      seen.add(bot.id);
-      const button = document.createElement("button");
-      button.type = "button";
-      button.dataset.id = bot.id;
-      button.textContent = optionLabel(bot);
-      button.setAttribute("role", "option");
-      if (bot.id === active) {
-        button.setAttribute("aria-selected", "true");
+      for (const bot of group.bots) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.dataset.id = bot.id;
+        button.textContent = optionLabel(bot);
+        button.setAttribute("role", "option");
+        if (bot.id === active) {
+          button.setAttribute("aria-selected", "true");
+        }
+        menu.appendChild(button);
       }
-      menu.appendChild(button);
     }
     menu.dataset.bots = signature;
     menu.dataset.active = active;
   }
 
-  function acceptBots(bots, settled) {
-    if (!bots.length) {
-      const cached = roster.length ? roster : readRoster();
-      if (cached.length) {
-        bots = cached;
+  function acceptBots(bots, settled, layout) {
+    let next = botRows(bots);
+    let nextPinned = pinned;
+    let nextSections = sections;
+    if (!next.length) {
+      const cached = roster.length
+        ? { bots: roster, pinned: pinned, sections: sections }
+        : readRoster();
+      if (cached.bots.length) {
+        next = cached.bots;
+        if (!layout) {
+          nextPinned = cached.pinned;
+          nextSections = cached.sections;
+        }
       } else if (settled) {
         roster = [];
+        pinned = [];
+        sections = [];
         rosterKnown = true;
         paint();
         return;
@@ -224,9 +364,15 @@ var unmountBotPicker;
         return;
       }
     }
-    writeRoster(bots);
+    if (layout) {
+      nextPinned = idRows(layout.pinned);
+      nextSections = sectionRows(layout.sections);
+    }
+    roster = next;
+    pinned = nextPinned;
+    sections = nextSections;
     rosterKnown = true;
-    roster = bots;
+    writeRoster();
     paint();
   }
 
@@ -347,6 +493,15 @@ var unmountBotPicker;
       "  border-top: 1px solid var(--line);",
       "  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.35);",
       "}",
+      ".menu .group {",
+      "  padding: 8px 10px 2px;",
+      "  overflow: hidden;",
+      "  font-size: 11px;",
+      "  line-height: 1.2;",
+      "  white-space: nowrap;",
+      "  text-overflow: ellipsis;",
+      "  opacity: 0.55;",
+      "}",
       ".menu button {",
       "  display: block;",
       "  width: 100%;",
@@ -403,8 +558,10 @@ var unmountBotPicker;
     syncScheme();
     if (!roster.length && !rosterKnown) {
       const cached = readRoster();
-      if (cached.length) {
-        roster = cached;
+      if (cached.bots.length) {
+        roster = cached.bots;
+        pinned = cached.pinned;
+        sections = cached.sections;
         rosterKnown = true;
       }
     }
@@ -423,7 +580,8 @@ var unmountBotPicker;
     if (!data) {
       return;
     }
-    acceptBots(data.bots, data.settled === true);
+    const hasLayout = Array.isArray(data.pinned) || Array.isArray(data.sections);
+    acceptBots(data.bots, data.settled === true, hasLayout ? data : null);
   });
 
   document.addEventListener(

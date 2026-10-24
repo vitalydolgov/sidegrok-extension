@@ -60,15 +60,75 @@
         hidden: agent.hiddenFromSidebar === true,
       });
     }
+    // Pins and named sections are store fields, not fields on each agent.
+    // __agents__ is the unassigned bucket; its members are whoever is left.
     try {
       window.postMessage(
         {
           source: "sidegrok-bots",
-          payload: JSON.stringify({ bots: bots, settled: true }),
+          payload: JSON.stringify({
+            bots: bots,
+            pinned: copyIds(state.pinnedAgentIds),
+            sections: copySections(state.sidebarSections),
+            settled: true,
+          }),
         },
         location.origin
       );
     } catch (error) {}
+  }
+
+  function copyIds(value) {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    const ids = [];
+    const seen = new Set();
+    for (let index = 0; index < value.length; index += 1) {
+      const id = value[index];
+      if (typeof id !== "string" || !id || seen.has(id)) {
+        continue;
+      }
+      seen.add(id);
+      ids.push(id);
+    }
+    return ids;
+  }
+
+  function copySections(value) {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    const sections = [];
+    const seenIds = new Set();
+    const seenAgents = new Set();
+    for (let index = 0; index < value.length; index += 1) {
+      const section = value[index];
+      if (!section || typeof section.id !== "string") {
+        continue;
+      }
+      const id = section.id.trim();
+      if (!id || id === "__agents__" || seenIds.has(id)) {
+        continue;
+      }
+      seenIds.add(id);
+      const agentIds = [];
+      const rawIds = Array.isArray(section.agentIds) ? section.agentIds : [];
+      for (let agentIndex = 0; agentIndex < rawIds.length; agentIndex += 1) {
+        const agentId = rawIds[agentIndex];
+        if (typeof agentId !== "string" || !agentId || seenAgents.has(agentId)) {
+          continue;
+        }
+        seenAgents.add(agentId);
+        agentIds.push(agentId);
+      }
+      sections.push({
+        id: id,
+        name: typeof section.name === "string" ? section.name : "",
+        agentIds: agentIds,
+      });
+    }
+    return sections;
   }
 
   function watchRoster() {
