@@ -1,7 +1,5 @@
-// Choosing a bot full-loads /bot/<id> in the drawer. That route stays empty
-// until the bot roster has loaded, and Grok starts that load only while its
-// own sidebar is expanded. This script starts that load in the drawer, then
-// reads the roster from the page and posts it to the picker.
+// Grok starts the roster only while its own sidebar is expanded. This script
+// starts that load in the drawer, then reads the roster and posts it to the picker.
 //
 // Firefox can hand this script an Xray wrapper of the page, which hides
 // React's expando properties. wrappedJSObject is the page object. The roster
@@ -10,8 +8,17 @@
 
 (function () {
   const marker = 'name:"useBotsStore"';
+  const SIDEBAR_KEY = "sidegrok-sidebar";
   let store = null;
   let started = false;
+
+  // The previous sidebar document set this. Marking the page before Grok
+  // boots lets bootstrap run as soon as the store chunk loads.
+  try {
+    if (sessionStorage.getItem(SIDEBAR_KEY) === "1" && document.documentElement) {
+      document.documentElement.dataset.sidegrok = "sidebar";
+    }
+  } catch (error) {}
 
   function boot() {
     if (started || !store) {

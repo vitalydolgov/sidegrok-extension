@@ -35,7 +35,7 @@
     },
     {
       "matches": ["https://grok.com/*", "https://www.grok.com/*"],
-      "js": ["roster.js"],
+      "js": ["roster.js", "navigate.js"],
       "run_at": "document_start",
       "world": "MAIN"
     }
