@@ -16,6 +16,7 @@ var unmountBotPicker;
   let sections = [];
   let rosterKnown = false;
   let navigating = false;
+  let navWatch = 0;
 
   // Built as elements inside the picker shadow. An image file would not take
   // the shadow's currentColor and --panel fills.
@@ -108,6 +109,23 @@ var unmountBotPicker;
     } catch (error) {}
   }
 
+  function stopNavWatch() {
+    if (!navWatch) {
+      return;
+    }
+    clearInterval(navWatch);
+    navWatch = 0;
+  }
+
+  function assignBot(id) {
+    const url = new URL("/bot/" + encodeURIComponent(id), location.origin).href;
+    try {
+      location.assign(url);
+    } catch (error) {
+      navigating = false;
+    }
+  }
+
   function openBot(id) {
     closeMenu();
     if (!id || id === currentBotId() || navigating) {
@@ -117,12 +135,45 @@ var unmountBotPicker;
     // the URL can move before the next page paints. Either one would rename the
     // button to a bot that this page has not opened yet.
     navigating = true;
-    const url = new URL("/bot/" + encodeURIComponent(id), location.origin).href;
-    try {
-      location.assign(url);
-    } catch (error) {
-      navigating = false;
+    let answered = false;
+    const started = Date.now();
+    function onNav(event) {
+      const data = event.data;
+      if (!data || data.source !== "sidegrok-nav" || data.id !== id) {
+        return;
+      }
+      answered = true;
     }
+    window.addEventListener("message", onNav);
+    window.postMessage({ source: "sidegrok-open-bot", id: id }, location.origin);
+    stopNavWatch();
+    navWatch = setInterval(function () {
+      if (currentBotId() === id) {
+        stopNavWatch();
+        window.removeEventListener("message", onNav);
+        navigating = false;
+        paint();
+        return;
+      }
+      // The page router answers when it accepts the move. No answer means the
+      // page script missed it, so this document has to load the bot itself.
+      if (!answered && Date.now() - started > 400) {
+        stopNavWatch();
+        window.removeEventListener("message", onNav);
+        assignBot(id);
+        return;
+      }
+      if (Date.now() - started > 2000) {
+        stopNavWatch();
+        window.removeEventListener("message", onNav);
+        if (currentBotId() !== id) {
+          assignBot(id);
+          return;
+        }
+        navigating = false;
+        paint();
+      }
+    }, 40);
   }
 
   function optionLabel(bot) {

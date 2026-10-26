@@ -3,6 +3,7 @@
 
 (function () {
   const PANEL_HEIGHT = "44px";
+  const SIDEBAR_KEY = "sidegrok-sidebar";
 
   let panelHost = null;
   let hideBottomPanel = false;
@@ -121,9 +122,15 @@
     }
     if (isSidebar) {
       root.dataset.sidegrok = "sidebar";
+      try {
+        sessionStorage.setItem(SIDEBAR_KEY, "1");
+      } catch (error) {}
       showPanel();
     } else if (root.dataset.sidegrok === "sidebar") {
       delete root.dataset.sidegrok;
+      try {
+        sessionStorage.removeItem(SIDEBAR_KEY);
+      } catch (error) {}
       hidePanel();
     }
   }
@@ -164,6 +171,12 @@
     }
     syncBottomPanelSetting(changes[HIDE_BOTTOM_PANEL_KEY].newValue);
   });
+
+  try {
+    if (sessionStorage.getItem(SIDEBAR_KEY) === "1") {
+      markSidebar(true);
+    }
+  } catch (error) {}
 
   reportPanelUrl(false);
   window.addEventListener("pageshow", () => reportPanelUrl(false));
