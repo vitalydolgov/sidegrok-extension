@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.3 — 2026-10-26
+
+The bot picker shows pinned bots and sections again.
+
 ## 1.3.2 — 2026-10-26
 
 Choosing a bot opens its conversation without reloading the page.
