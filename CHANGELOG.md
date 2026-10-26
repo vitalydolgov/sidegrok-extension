@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.2 — 2026-10-26
+
+Choosing a bot opens its conversation without reloading the page.
+
 ## 1.3.1 — 2026-10-25
 
 The bot picker stays disabled until the bot list has loaded.
