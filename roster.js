@@ -1,8 +1,5 @@
-// A full load of /bot/<id> asks for the thread before this drawer has started
-// Grok's roster, so Grok shows "Couldn't load this bot's thread" and then
-// recovers. The picker asks this script to move with the page router instead.
 // Grok starts the roster only while its own sidebar is expanded. This script
-// starts that load in the drawer, then reads the roster and posts it.
+// starts that load in the drawer, then reads the roster and posts it to the picker.
 //
 // Firefox can hand this script an Xray wrapper of the page, which hides
 // React's expando properties. wrappedJSObject is the page object. The roster
@@ -358,108 +355,6 @@
     return best;
   }
 
-  function isAppRouter(value) {
-    value = raw(value);
-    if (!value || typeof value !== "object") {
-      return false;
-    }
-    return (
-      typeof value.push === "function" &&
-      typeof value.replace === "function" &&
-      typeof value.refresh === "function" &&
-      typeof value.back === "function" &&
-      typeof value.forward === "function" &&
-      typeof value.prefetch === "function"
-    );
-  }
-
-  function routerFromFiber(fiber) {
-    const seen = new Set();
-    const stack = fiber ? [fiber] : [];
-    let steps = 0;
-    while (stack.length && steps < 20000) {
-      const node = raw(stack.pop());
-      steps += 1;
-      if (!node || (typeof node !== "object" && typeof node !== "function") || seen.has(node)) {
-        continue;
-      }
-      seen.add(node);
-      if (node.child) {
-        stack.push(node.child);
-      }
-      if (node.sibling) {
-        stack.push(node.sibling);
-      }
-      const props = raw(node.memoizedProps);
-      if (props && isAppRouter(props.value)) {
-        return raw(props.value);
-      }
-      let dep = raw(node.dependencies);
-      let context = dep && raw(dep.firstContext);
-      let hops = 0;
-      while (context && hops < 30) {
-        hops += 1;
-        if (isAppRouter(context.memoizedValue)) {
-          return raw(context.memoizedValue);
-        }
-        context = raw(context.next);
-      }
-    }
-    return null;
-  }
-
-  function findRouter() {
-    try {
-      const next = raw(globalThis.next);
-      if (next && isAppRouter(next.router)) {
-        return raw(next.router);
-      }
-    } catch (error) {}
-    const doc = raw(document);
-    const hosts = [];
-    if (doc) {
-      hosts.push(raw(doc.getElementById("grok-app-root")));
-      hosts.push(raw(doc.body));
-      hosts.push(raw(doc.documentElement));
-    }
-    for (let index = 0; index < hosts.length; index += 1) {
-      const key = reactKey(hosts[index]);
-      if (!key) {
-        continue;
-      }
-      let fiber = raw(hosts[index][key]);
-      const stateNode = fiber && raw(fiber.stateNode);
-      if (stateNode && stateNode.current) {
-        fiber = raw(stateNode.current);
-      }
-      const found = routerFromFiber(fiber);
-      if (found) {
-        return found;
-      }
-    }
-    return null;
-  }
-
-  // A full document load drops the roster and the bot page fails its first
-  // thread request. The page router keeps the roster and loads the thread once.
-  function clientNavigate(href) {
-    const router = findRouter();
-    if (!router) {
-      return false;
-    }
-    try {
-      const pending = router.push(href);
-      if (pending && typeof pending.then === "function") {
-        pending.catch(function () {
-          location.assign(new URL(href, location.origin).href);
-        });
-      }
-      return true;
-    } catch (error) {
-      return false;
-    }
-  }
-
   function publish() {
     if (!isSidebar()) {
       return;
@@ -502,23 +397,5 @@
     });
   }
   document.addEventListener("DOMContentLoaded", onSidebar);
-  window.addEventListener("message", function (event) {
-    if (event.origin !== location.origin) {
-      return;
-    }
-    const data = event.data;
-    if (!data || data.source !== "sidegrok-open-bot" || typeof data.id !== "string" || !data.id) {
-      return;
-    }
-    if (!isSidebar()) {
-      return;
-    }
-    const href = "/bot/" + encodeURIComponent(data.id);
-    if (clientNavigate(href)) {
-      window.postMessage({ source: "sidegrok-nav", id: data.id }, location.origin);
-      return;
-    }
-    location.assign(new URL(href, location.origin).href);
-  });
   onSidebar();
 })();
