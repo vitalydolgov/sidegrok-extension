@@ -150,30 +150,46 @@
     }
   }
 
+  // The chunk is still tagged name:"useBotsStore". The export name is minified,
+  // so the store is whichever export has bootstrap and the agent list.
   function remember(exports) {
     if (store || !exports || (typeof exports !== "object" && typeof exports !== "function")) {
       return;
     }
-    let found;
+    let names;
     try {
-      found = exports.useBotsStore;
+      names = Object.keys(exports);
     } catch (error) {
       return;
     }
-    if (!found || typeof found.getState !== "function") {
-      return;
-    }
-    let state;
     try {
-      state = found.getState();
-    } catch (error) {
+      if (exports.useBotsStore) {
+        names.unshift("useBotsStore");
+      }
+    } catch (error) {}
+    for (let index = 0; index < names.length; index += 1) {
+      let found;
+      try {
+        found = exports[names[index]];
+      } catch (error) {
+        continue;
+      }
+      if (!found || typeof found.getState !== "function") {
+        continue;
+      }
+      let state;
+      try {
+        state = found.getState();
+      } catch (error) {
+        continue;
+      }
+      if (!state || typeof state.bootstrap !== "function" || !Array.isArray(state.agents)) {
+        continue;
+      }
+      store = found;
+      watchRoster();
       return;
     }
-    if (!state || typeof state.bootstrap !== "function") {
-      return;
-    }
-    store = found;
-    watchRoster();
   }
 
   function wrap(factory) {
