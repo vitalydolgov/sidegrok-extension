@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.4 — 2026-10-29
+
+Opening the drawer on a bot conversation no longer shows a load error.
+
 ## 1.3.3 — 2026-10-26
 
 The bot picker shows pinned bots and sections again.
