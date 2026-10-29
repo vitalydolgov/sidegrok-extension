@@ -4,6 +4,7 @@
 (function () {
   const PANEL_HEIGHT = "44px";
   const SIDEBAR_KEY = "sidegrok-sidebar";
+  const BOOT_KEY = "sidegrok-restore";
 
   let panelHost = null;
   let hideBottomPanel = false;
@@ -12,6 +13,7 @@
   let lastReportedUrl = "";
   let track = true;
   let timer = 0;
+  let restoreBotId = "";
 
   function ensureOffsetStyle() {
     if (document.getElementById("sidegrok-bot-offset")) {
@@ -135,23 +137,78 @@
     }
   }
 
+  function currentBotId() {
+    const match = /^\/bot\/([^/?#]+)/i.exec(location.pathname);
+    if (!match) {
+      return "";
+    }
+    try {
+      return decodeURIComponent(match[1]);
+    } catch (error) {
+      return match[1];
+    }
+  }
+
+  // The shell load must not be stored in place of the bot thread. The hash
+  // is the id for this document; sessionStorage covers a same-context reload
+  // that already dropped the hash.
+  function captureBootBot() {
+    try {
+      const hash = /^#sidegrok-bot=([^&]+)/.exec(location.hash || "");
+      if (hash) {
+        const id = decodeURIComponent(hash[1]);
+        history.replaceState(null, "", location.pathname + location.search);
+        sessionStorage.setItem(BOOT_KEY, id);
+        return id;
+      }
+      const stored = sessionStorage.getItem(BOOT_KEY) || "";
+      if (!stored) {
+        return "";
+      }
+      const path = location.pathname.replace(/\/+$/, "") || "/";
+      if (path === "/") {
+        return stored;
+      }
+      sessionStorage.removeItem(BOOT_KEY);
+      return "";
+    } catch (error) {
+      return "";
+    }
+  }
+
+  function restoreToken() {
+    if (!restoreBotId) {
+      return "";
+    }
+    if (currentBotId() === restoreBotId) {
+      restoreBotId = "";
+      try {
+        sessionStorage.removeItem(BOOT_KEY);
+      } catch (error) {}
+      return "";
+    }
+    return restoreBotId;
+  }
+
   function reportPanelUrl(closing) {
     if (!track) {
       return;
     }
     const url = location.href;
-    if (!closing && url === lastReportedUrl) {
+    const restore = restoreToken();
+    const reportKey = restore + " " + url;
+    if (!closing && reportKey === lastReportedUrl) {
       return;
     }
     browser.runtime
-      .sendMessage({ type: "panel-url", url, closing })
+      .sendMessage({ type: "panel-url", url, closing, restore })
       .then((response) => {
         if (response && response.sidebar === false) {
           stopTracking();
           return;
         }
         markSidebar(true);
-        lastReportedUrl = url;
+        lastReportedUrl = reportKey;
       })
       .catch(() => {});
   }
@@ -172,11 +229,29 @@
     syncBottomPanelSetting(changes[HIDE_BOTTOM_PANEL_KEY].newValue);
   });
 
+  restoreBotId = captureBootBot();
+
   try {
     if (sessionStorage.getItem(SIDEBAR_KEY) === "1") {
       markSidebar(true);
     }
   } catch (error) {}
+
+  window.addEventListener("message", (event) => {
+    if (event.origin !== location.origin) {
+      return;
+    }
+    const data = event.data;
+    if (!data || data.source !== "sidegrok-restore-cancel") {
+      return;
+    }
+    restoreBotId = "";
+    try {
+      sessionStorage.removeItem(BOOT_KEY);
+    } catch (error) {}
+    lastReportedUrl = "";
+    reportPanelUrl(false);
+  });
 
   reportPanelUrl(false);
   window.addEventListener("pageshow", () => reportPanelUrl(false));

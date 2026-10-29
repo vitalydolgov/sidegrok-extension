@@ -10,6 +10,12 @@
 // be recorded. Applying the URL while the panel is open calls
 // SidebarController.show, which reloads the page.
 //
+// A saved /bot/<id> page is not what setPanel loads. That full load asks for
+// the thread before the roster exists, and Grok shows "Couldn't load this
+// bot's thread" until the roster recovers. setPanel loads the app shell with
+// a one-time hash. The page opens the bot with the router once the roster
+// is ready. The hash is not stored; panelUrl stays the bot thread.
+//
 // Context-menu actions (summarize, explain, quiz, proofread) belong to the
 // built-in chatbot and are intentionally not implemented here.
 
@@ -245,17 +251,48 @@ function toggleSidebar() {
   });
 }
 
+function panelRestoreId(value) {
+  try {
+    const match = /^#sidegrok-bot=([^&]+)/.exec(new URL(value).hash);
+    if (!match) {
+      return "";
+    }
+    return decodeURIComponent(match[1]);
+  } catch (error) {
+    return "";
+  }
+}
+
 function applySavedPanel() {
   const run = applyChain.then(async () => {
     // panelUrl can change while setPanel is in flight. Read it again after
     // each attempt so a slow home-page write cannot clobber a later page.
     for (let attempt = 0; attempt < 4; attempt++) {
-      const current = grokPanelUrl(await browser.sidebarAction.getPanel({}));
+      const raw = await browser.sidebarAction.getPanel({});
+      const current = grokPanelUrl(raw);
       const desired = panelUrl;
-      if (current === desired) {
+      const load = grokPanelLoadUrl(desired);
+      if (!load) {
         return;
       }
-      await browser.sidebarAction.setPanel({ panel: desired });
+      // grokPanelUrl drops the hash, so the shell and the home page look the
+      // same. The hash has to match too, or a stale bot shell stays in place
+      // after the saved page is no longer that bot.
+      if (current === grokPanelUrl(load) && panelRestoreId(raw) === grokBotId(desired)) {
+        return;
+      }
+      let open = false;
+      try {
+        open = await browser.sidebarAction.isOpen({});
+      } catch (error) {
+        console.error(error);
+      }
+      // setPanel while the drawer is open reloads it. Leave a bot thread
+      // that is already showing; the next close points the panel at the shell.
+      if (open && grokBotId(current) && grokBotId(current) === grokBotId(desired)) {
+        return;
+      }
+      await browser.sidebarAction.setPanel({ panel: load });
     }
   });
   applyChain = run.catch((error) => {
@@ -322,7 +359,12 @@ browser.runtime.onMessage.addListener((message, sender) => {
   if (new URL(senderPage).origin !== new URL(reported).origin) {
     return Promise.resolve({ sidebar: false });
   }
-  rememberPanelUrl(reported);
+  // The shell is only a place to start the roster. Saving it would replace
+  // the bot thread the drawer is about to open.
+  const restore = typeof message.restore === "string" ? message.restore : "";
+  if (!restore) {
+    rememberPanelUrl(reported);
+  }
   if (!message.closing) {
     wasOpen = true;
     return Promise.resolve({ sidebar: true });

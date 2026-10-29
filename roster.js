@@ -55,6 +55,8 @@
     if (!state || state.rosterLoaded !== true || !Array.isArray(state.agents)) {
       return;
     }
+    // Opening the drawer waits for this before moving to a saved bot thread.
+    root.dataset.sidegrokRoster = "ready";
     const bots = [];
     for (let index = 0; index < state.agents.length; index += 1) {
       const agent = state.agents[index];

@@ -5,16 +5,18 @@ const openTab = document.getElementById("open-tab");
 // last Grok page. Once that navigation starts, this document is replaced.
 async function openSavedPanel() {
   let panel = GROK_HOME;
+  let saved = GROK_HOME;
   try {
     const stored = await browser.storage.local.get(PANEL_URL_KEY);
-    panel = grokPanelUrl(stored[PANEL_URL_KEY]) || GROK_HOME;
-    openTab.href = panel;
+    saved = grokPanelUrl(stored[PANEL_URL_KEY]) || GROK_HOME;
+    panel = grokPanelLoadUrl(saved) || saved;
+    openTab.href = saved;
     await browser.sidebarAction.setPanel({ panel });
   } catch (error) {
     console.error(error);
     status.textContent = "Grok could not open in the sidebar.";
     openTab.hidden = false;
-    openTab.href = panel;
+    openTab.href = saved;
     openTab.addEventListener("click", (event) => {
       event.preventDefault();
       browser.tabs.create({ url: openTab.href || GROK_HOME });

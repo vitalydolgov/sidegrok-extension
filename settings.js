@@ -27,3 +27,38 @@ function grokPanelUrl(value) {
     return null;
   }
 }
+
+// A full load of /bot/<id> asks for the thread before the roster exists.
+// Grok then shows "Couldn't load this bot's thread" until that roster
+// recovers. The drawer loads the app shell and opens the bot afterwards.
+function grokBotId(value) {
+  const page = grokPanelUrl(value);
+  if (!page) {
+    return "";
+  }
+  const match = new URL(page).pathname.match(/^\/bot\/([^/?#]+)/i);
+  if (!match) {
+    return "";
+  }
+  try {
+    return decodeURIComponent(match[1]);
+  } catch (error) {
+    return match[1];
+  }
+}
+
+function grokPanelLoadUrl(value) {
+  const page = grokPanelUrl(value);
+  if (!page) {
+    return null;
+  }
+  const id = grokBotId(page);
+  if (!id) {
+    return page;
+  }
+  const url = new URL(page);
+  url.pathname = "/";
+  url.search = "";
+  url.hash = "sidegrok-bot=" + encodeURIComponent(id);
+  return url.href;
+}

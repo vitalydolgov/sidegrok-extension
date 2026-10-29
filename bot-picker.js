@@ -5,6 +5,7 @@ var unmountBotPicker;
 
 (function () {
   const ROSTER_KEY = "sidegrok-roster";
+  const BOOT_KEY = "sidegrok-restore";
 
   let choice = null;
   let label = null;
@@ -56,6 +57,32 @@ var unmountBotPicker;
   function currentBotId() {
     const match = location.pathname.match(/^\/bot\/([^/?#]+)/i);
     return match ? decodeURIComponent(match[1]) : "";
+  }
+
+  // The drawer restores a bot by loading /, then moving to the thread once
+  // the roster is ready. Until that move, the path has no bot id. The hash
+  // captured at the start of this document is the bot to select once the
+  // list exists. The name comes from that list, so the button stays on
+  // Loading... until it can be opened.
+  function pendingBotId() {
+    const root = document.documentElement;
+    if (root && root.dataset.sidegrokRestore) {
+      return root.dataset.sidegrokRestore;
+    }
+    try {
+      const stored = sessionStorage.getItem(BOOT_KEY) || "";
+      if (!stored) {
+        return "";
+      }
+      const path = location.pathname.replace(/\/+$/, "") || "/";
+      return path === "/" ? stored : "";
+    } catch (error) {
+      return "";
+    }
+  }
+
+  function activeBotId() {
+    return currentBotId() || pendingBotId();
   }
 
   function closeMenu() {
@@ -288,6 +315,8 @@ var unmountBotPicker;
       label.textContent = optionLabel(match);
       return;
     }
+    // A name or Choose... means the menu can open. Keep Loading... until the
+    // roster has something to show, including while a bot is being restored.
     if (!roster.length) {
       label.textContent = rosterKnown ? "No bots" : "Loading...";
       return;
@@ -299,7 +328,7 @@ var unmountBotPicker;
     if (!choice || !menu) {
       return;
     }
-    const active = currentBotId();
+    const active = activeBotId();
     showChoice(active);
     // An empty roster is still loading, or the account has no bots.
     // Either way the menu has nothing to show, so the button stays shut.
