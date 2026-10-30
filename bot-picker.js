@@ -10,6 +10,9 @@ var unmountBotPicker;
   let choice = null;
   let label = null;
   let menu = null;
+  let rosterBox = null;
+  let filterInput = null;
+  let filterEmpty = null;
   let host = null;
   let schemeObserver = null;
   let roster = [];
@@ -93,6 +96,16 @@ var unmountBotPicker;
     if (choice) {
       choice.setAttribute("aria-expanded", "false");
     }
+    // The field sits in the menu. Leaving it focused would keep typing into
+    // a hidden box after the menu closes.
+    const filterFocused = filterInput && filterInput.matches(":focus");
+    if (filterInput && filterInput.value) {
+      filterInput.value = "";
+      applyFilter();
+    }
+    if (filterFocused) {
+      filterInput.blur();
+    }
   }
 
   function pageScheme() {
@@ -167,6 +180,65 @@ var unmountBotPicker;
 
   function optionLabel(bot) {
     return bot.hidden ? bot.name + " (hidden)" : bot.name;
+  }
+
+  // "Jose" matches "José". Combining marks and case are not part of the query.
+  function fold(value) {
+    return value.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().trim();
+  }
+
+  // grok.com listens for keys on the page. Outside this closed shadow the
+  // target is the host, so the first character moves focus to the composer.
+  // This runs at document_start, before that listener.
+  function shieldField(event) {
+    if (!filterInput || !menu || menu.hidden || !filterInput.matches(":focus")) {
+      return false;
+    }
+    event.stopPropagation();
+    return true;
+  }
+
+  function openOnlyMatch() {
+    if (!rosterBox) {
+      return;
+    }
+    const visible = [];
+    const buttons = rosterBox.querySelectorAll("button");
+    for (const item of buttons) {
+      if (!item.hidden) {
+        visible.push(item);
+      }
+    }
+    if (visible.length !== 1) {
+      return;
+    }
+    openBot(visible[0].dataset.id || "");
+  }
+
+  function applyFilter() {
+    if (!rosterBox) {
+      return;
+    }
+    const query = fold(filterInput ? filterInput.value : "");
+    let shown = 0;
+    const sections = rosterBox.querySelectorAll(".section");
+    for (const section of sections) {
+      let sectionShown = 0;
+      const buttons = section.querySelectorAll("button");
+      for (const button of buttons) {
+        const match = !query || fold(button.textContent || "").includes(query);
+        button.hidden = !match;
+        if (match) {
+          sectionShown += 1;
+        }
+      }
+      section.hidden = sectionShown === 0;
+      shown += sectionShown;
+    }
+    rosterBox.hidden = !!query && shown === 0;
+    if (filterEmpty) {
+      filterEmpty.hidden = !query || shown > 0;
+    }
   }
 
   function botRows(value) {
@@ -325,7 +397,7 @@ var unmountBotPicker;
   }
 
   function paint() {
-    if (!choice || !menu) {
+    if (!choice || !menu || !rosterBox) {
       return;
     }
     const active = activeBotId();
@@ -334,7 +406,7 @@ var unmountBotPicker;
     // Either way the menu has nothing to show, so the button stays shut.
     choice.disabled = !roster.length;
     if (!roster.length) {
-      menu.replaceChildren();
+      rosterBox.replaceChildren();
       menu.dataset.bots = "";
       menu.dataset.active = "";
       closeMenu();
@@ -360,7 +432,7 @@ var unmountBotPicker;
     if (!menu.hidden) {
       return;
     }
-    menu.replaceChildren();
+    rosterBox.replaceChildren();
     for (const group of groups) {
       const section = document.createElement("div");
       section.className = "section";
@@ -381,10 +453,11 @@ var unmountBotPicker;
         }
         section.appendChild(button);
       }
-      menu.appendChild(section);
+      rosterBox.appendChild(section);
     }
     menu.dataset.bots = signature;
     menu.dataset.active = active;
+    applyFilter();
   }
 
   function acceptBots(bots, settled, layout) {
@@ -468,6 +541,7 @@ var unmountBotPicker;
     const style = document.createElement("style");
     style.textContent = [
       ":host {",
+      "  color-scheme: dark;",
       "  --panel: #171716;",
       "  --ink: #f5f5f5;",
       "  --muted: #8d8d8a;",
@@ -475,6 +549,7 @@ var unmountBotPicker;
       "  --hover: #2a2a2a;",
       "}",
       ":host([data-scheme='light']) {",
+      "  color-scheme: light;",
       "  --panel: #f4f1f0;",
       "  --ink: #171717;",
       "  --muted: #736e6b;",
@@ -545,12 +620,10 @@ var unmountBotPicker;
       "  bottom: 100%;",
       "  width: min(200px, calc(100% - 20px));",
       "  box-sizing: border-box;",
+      "  display: flex;",
+      "  flex-direction: column;",
       "  max-height: min(420px, calc(100dvh - 52px));",
-      "  overflow: auto;",
-      "  overscroll-behavior: contain;",
-      "  scrollbar-width: thin;",
-      "  scrollbar-color: var(--line) transparent;",
-      "  padding: 4px;",
+      "  overflow: hidden;",
       "  background: var(--panel);",
       "  color: var(--ink);",
       '  font: 13px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;',
@@ -559,12 +632,47 @@ var unmountBotPicker;
       "  border-radius: 10px 10px 0 0;",
       "  box-shadow: 0 -10px 28px rgba(0, 0, 0, 0.28);",
       "}",
+      "/* display:flex overrides the hidden attribute, which would leave the search showing. */",
+      ".menu[hidden] { display: none !important; }",
+      ".roster {",
+      "  flex: 1 1 auto;",
+      "  min-height: 0;",
+      "  display: flex;",
+      "  flex-direction: column;",
+      "  gap: 6px;",
+      "  overflow: auto;",
+      "  overscroll-behavior: contain;",
+      "  scrollbar-width: thin;",
+      "  scrollbar-color: var(--line) transparent;",
+      "  padding: 4px;",
+      "}",
+      ".roster[hidden], .section[hidden], .menu button[hidden], .empty[hidden] {",
+      "  display: none;",
+      "}",
+      ".empty {",
+      "  padding: 6px 12px;",
+      "  color: var(--muted);",
+      "}",
+      ".filter {",
+      "  flex: 0 0 auto;",
+      "  box-sizing: border-box;",
+      "  width: 100%;",
+      "  margin: 0;",
+      "  padding: 8px 12px;",
+      "  appearance: none;",
+      "  background: transparent;",
+      "  border: 0;",
+      "  border-top: 1px solid var(--line);",
+      "  border-radius: 0;",
+      "  color: var(--ink);",
+      "  caret-color: var(--ink);",
+      "  font: inherit;",
+      "  outline: 0;",
+      "}",
+      ".filter::placeholder { color: var(--muted); }",
       ".section {",
       "  display: flex;",
       "  flex-direction: column;",
-      "}",
-      ".section + .section {",
-      "  margin-top: 6px;",
       "}",
       ".menu .group {",
       "  padding: 6px 8px 2px;",
@@ -616,6 +724,9 @@ var unmountBotPicker;
       if (menu.hidden) {
         menu.hidden = false;
         button.setAttribute("aria-expanded", "true");
+        if (filterInput) {
+          filterInput.focus({ preventScroll: true });
+        }
       } else {
         closeMenu();
       }
@@ -625,20 +736,80 @@ var unmountBotPicker;
     const list = document.createElement("div");
     list.className = "menu";
     list.hidden = true;
-    list.setAttribute("role", "listbox");
-    list.addEventListener("click", function (event) {
+    const bots = document.createElement("div");
+    bots.className = "roster";
+    bots.setAttribute("role", "listbox");
+    bots.addEventListener("click", function (event) {
       const item = event.target.closest("button");
-      if (!item || !list.contains(item)) {
+      if (!item || !bots.contains(item)) {
         return;
       }
       openBot(item.dataset.id || "");
     });
+    const none = document.createElement("div");
+    none.className = "empty";
+    none.hidden = true;
+    none.textContent = "No matches";
+    const filter = document.createElement("input");
+    filter.className = "filter";
+    filter.type = "search";
+    filter.placeholder = "Search...";
+    filter.setAttribute("aria-label", "Search bots");
+    filter.autocomplete = "off";
+    filter.spellcheck = false;
+    // Closed shadow retargets these keys to the host. grok.com then treats
+    // them as page keys and moves focus to the composer after the first one.
+    function keepKey(event) {
+      event.stopPropagation();
+    }
+    filter.addEventListener("input", function (event) {
+      keepKey(event);
+      applyFilter();
+    });
+    for (const type of ["keyup", "keypress", "beforeinput", "compositionstart", "compositionupdate", "compositionend"]) {
+      filter.addEventListener(type, keepKey);
+    }
+    filter.addEventListener("blur", function (event) {
+      if (!menu || menu.hidden) {
+        return;
+      }
+      const next = event.relatedTarget;
+      if (next && next.getRootNode && next.getRootNode() === filter.getRootNode()) {
+        return;
+      }
+      queueMicrotask(function () {
+        if (!filterInput || !menu || menu.hidden || filterInput.matches(":focus")) {
+          return;
+        }
+        filterInput.focus({ preventScroll: true });
+      });
+    });
+    filter.addEventListener("keydown", function (event) {
+      keepKey(event);
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeMenu();
+        if (choice) {
+          choice.focus({ preventScroll: true });
+        }
+        return;
+      }
+      if (event.key !== "Enter") {
+        return;
+      }
+      event.preventDefault();
+      openOnlyMatch();
+    });
+    list.append(bots, none, filter);
     slot.append(button);
     bar.append(slot, list);
     shadow.append(style, bar);
     choice = button;
     label = name;
     menu = list;
+    rosterBox = bots;
+    filterInput = filter;
+    filterEmpty = none;
     watchScheme();
     syncScheme();
     if (!roster.length && !rosterKnown) {
@@ -657,8 +828,40 @@ var unmountBotPicker;
     choice = null;
     label = null;
     menu = null;
+    rosterBox = null;
+    filterInput = null;
+    filterEmpty = null;
     host = null;
   };
+
+  window.addEventListener("keydown", function (event) {
+    if (!shieldField(event)) {
+      return;
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeMenu();
+      if (choice) {
+        choice.focus({ preventScroll: true });
+      }
+      return;
+    }
+    if (event.key === "Enter") {
+      event.preventDefault();
+      openOnlyMatch();
+    }
+  }, true);
+  for (const type of ["keyup", "keypress", "beforeinput"]) {
+    window.addEventListener(type, shieldField, true);
+  }
+  window.addEventListener("input", function (event) {
+    if (!shieldField(event)) {
+      return;
+    }
+    // The key was stopped before it reached the field, so the field's own
+    // input listener does not run.
+    applyFilter();
+  }, true);
 
   window.addEventListener("message", function (event) {
     const data = botsMessage(event);
