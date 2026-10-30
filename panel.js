@@ -71,6 +71,7 @@
     const shadow = host.attachShadow({ mode: "closed" });
     document.documentElement.appendChild(host);
     panelHost = host;
+    watchTheme(host);
     mountBotPicker(shadow);
   }
 

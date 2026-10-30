@@ -30,7 +30,7 @@
   "content_scripts": [
     {
       "matches": ["https://grok.com/*", "https://www.grok.com/*"],
-      "js": ["settings.js", "bot-picker.js", "panel.js"],
+      "js": ["settings.js", "theme.js", "bot-picker.js", "panel.js"],
       "run_at": "document_start"
     },
     {

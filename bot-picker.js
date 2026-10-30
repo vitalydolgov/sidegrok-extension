@@ -14,7 +14,6 @@ var unmountBotPicker;
   let filterInput = null;
   let filterEmpty = null;
   let host = null;
-  let schemeObserver = null;
   let roster = [];
   let pinned = [];
   let sections = [];
@@ -27,7 +26,7 @@ var unmountBotPicker;
   let navWatch = 0;
 
   // Built as elements inside the picker shadow. An image file would not take
-  // the shadow's currentColor and --panel fills.
+  // the shadow's currentColor and background color.
   function botIcon() {
     const ns = "http://www.w3.org/2000/svg";
     const shape = "M228.541 114.228C228.541 130.133 225.184 145.994 218.738 160.534C212.674 174.217 203.904 186.669 193.065 196.988C155.933 232.34 99.497 238.596 55.5255 212.24C45.097 205.99 35.6851 198.072 27.7451 188.866C19.1926 178.953 12.3686 167.569 7.65781 155.351C2.60712 142.264 0 128.257 0 114.228C0 98.3219 3.35751 82.4611 9.80315 67.9215C15.8672 54.2382 24.6377 41.7862 35.4767 31.4668C72.6081 -3.88483 129.044 -10.1413 173.016 16.2153C183.444 22.4653 192.856 30.3829 200.796 39.5896C209.349 49.5018 216.173 60.8859 220.883 73.1037C225.934 86.1906 228.541 100.198 228.541 114.228Z";
@@ -113,47 +112,6 @@ var unmountBotPicker;
     if (filterFocused) {
       filterInput.blur();
     }
-  }
-
-  function pageScheme() {
-    const root = document.documentElement;
-    if (!root) {
-      return "dark";
-    }
-    // Grok keeps scheme-light in the class list and adds dark for its dark theme.
-    if (root.classList.contains("dark")) {
-      return "dark";
-    }
-    if (root.classList.contains("scheme-light") || root.style.colorScheme === "light") {
-      return "light";
-    }
-    try {
-      if (window.matchMedia("(prefers-color-scheme: light)").matches) {
-        return "light";
-      }
-    } catch (error) {}
-    return "dark";
-  }
-
-  function syncScheme() {
-    if (!host) {
-      return;
-    }
-    host.dataset.scheme = pageScheme();
-  }
-
-  function watchScheme() {
-    if (schemeObserver || !document.documentElement) {
-      return;
-    }
-    schemeObserver = new MutationObserver(syncScheme);
-    schemeObserver.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["class", "style"],
-    });
-    try {
-      window.matchMedia("(prefers-color-scheme: light)").addEventListener("change", syncScheme);
-    } catch (error) {}
   }
 
   function stopNavWatch() {
@@ -584,26 +542,6 @@ var unmountBotPicker;
     host = shadow.host;
     const style = document.createElement("style");
     style.textContent = [
-      ":host {",
-      "  color-scheme: dark;",
-      "  --panel: #171716;",
-      "  --ink: #f5f5f5;",
-      "  --muted: #8d8d8a;",
-      "  --line: #333;",
-      "  --hover: #2a2a2a;",
-      "  --field: #262623;",
-      "  --field-line: transparent;",
-      "}",
-      ":host([data-scheme='light']) {",
-      "  color-scheme: light;",
-      "  --panel: #f4f1f0;",
-      "  --ink: #171717;",
-      "  --muted: #736e6b;",
-      "  --line: #e4dfdd;",
-      "  --hover: #e7e2e0;",
-      "  --field: #fffeff;",
-      "  --field-line: #e5e5e5;",
-      "}",
       ".bar {",
       "  position: relative;",
       "  box-sizing: border-box;",
@@ -612,10 +550,10 @@ var unmountBotPicker;
       "  align-items: center;",
       "  gap: 4px;",
       "  padding: 0 10px;",
-      "  background: var(--panel);",
-      "  color: var(--ink);",
+      "  background: var(--background);",
+      "  color: var(--text);",
       '  font: 13px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;',
-      "  border-top: 1px solid var(--line);",
+      "  border-top: 1px solid var(--border);",
       "}",
       "button {",
       "  font: inherit;",
@@ -631,7 +569,7 @@ var unmountBotPicker;
       "}",
       ".mark svg { width: 16px; height: 16px; display: block; }",
       ".mark svg .body { fill: currentColor; }",
-      ".mark svg .eye { fill: var(--panel); }",
+      ".mark svg .eye { fill: var(--background); }",
       ".slot {",
       "  position: relative;",
       "  flex: 0 0 120px;",
@@ -672,10 +610,10 @@ var unmountBotPicker;
       "  flex-direction: column;",
       "  max-height: min(420px, calc(100dvh - 52px));",
       "  overflow: hidden;",
-      "  background: var(--panel);",
-      "  color: var(--ink);",
+      "  background: var(--background);",
+      "  color: var(--text);",
       '  font: 13px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;',
-      "  border: 1px solid var(--line);",
+      "  border: 1px solid var(--border);",
       "  border-bottom: 0;",
       "  border-radius: 10px 10px 0 0;",
       "  box-shadow: 0 -10px 28px rgba(0, 0, 0, 0.28);",
@@ -691,7 +629,7 @@ var unmountBotPicker;
       "  overflow: auto;",
       "  overscroll-behavior: contain;",
       "  scrollbar-width: thin;",
-      "  scrollbar-color: var(--line) transparent;",
+      "  scrollbar-color: var(--border) transparent;",
       "  padding: 4px;",
       "}",
       ".roster[hidden], .section[hidden], .menu button[hidden], .empty[hidden] {",
@@ -699,7 +637,7 @@ var unmountBotPicker;
       "}",
       ".empty {",
       "  padding: 6px 12px;",
-      "  color: var(--muted);",
+      "  color: var(--muted-text);",
       "}",
       ".filter {",
       "  flex: 0 0 auto;",
@@ -708,15 +646,15 @@ var unmountBotPicker;
       "  margin: 6px;",
       "  padding: 6px 10px;",
       "  appearance: none;",
-      "  background: var(--field);",
-      "  border: 1px solid var(--field-line);",
+      "  background: var(--input-background);",
+      "  border: 1px solid var(--input-border);",
       "  border-radius: 10px;",
-      "  color: var(--ink);",
-      "  caret-color: var(--ink);",
+      "  color: var(--text);",
+      "  caret-color: var(--text);",
       "  font: inherit;",
       "  outline: 0;",
       "}",
-      ".filter::placeholder { color: var(--muted); }",
+      ".filter::placeholder { color: var(--muted-text); }",
       ".section {",
       "  display: flex;",
       "  flex-direction: column;",
@@ -730,7 +668,7 @@ var unmountBotPicker;
       "  letter-spacing: 0.04em;",
       "  white-space: nowrap;",
       "  text-overflow: ellipsis;",
-      "  color: var(--muted);",
+      "  color: var(--muted-text);",
       "}",
       ".menu button {",
       "  display: block;",
@@ -744,7 +682,7 @@ var unmountBotPicker;
       "  border-radius: 6px;",
       "  text-align: left;",
       "}",
-      ".menu button:hover, .menu button[aria-selected='true'] { background: var(--hover); }",
+      ".menu button:hover, .menu button[aria-selected='true'] { background: var(--hover-background); }",
       ".menu button[aria-selected='true'] { font-weight: 600; }",
     ].join("\n");
     const bar = document.createElement("div");
@@ -857,8 +795,6 @@ var unmountBotPicker;
     rosterBox = bots;
     filterInput = filter;
     filterEmpty = none;
-    watchScheme();
-    syncScheme();
     if (!roster.length && !rosterKnown) {
       const cached = readRoster();
       if (cached.bots.length) {
