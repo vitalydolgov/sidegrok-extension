@@ -10,17 +10,23 @@ var unmountBotPicker;
   let choice = null;
   let label = null;
   let menu = null;
+  let rosterBox = null;
+  let filterInput = null;
+  let filterEmpty = null;
   let host = null;
-  let schemeObserver = null;
   let roster = [];
   let pinned = [];
   let sections = [];
   let rosterKnown = false;
+  // Rows the menu was built from. Search filters these, so a roster refresh
+  // does not swap the list under an open menu.
+  let menuRows = [];
+  let query = "";
   let navigating = false;
   let navWatch = 0;
 
   // Built as elements inside the picker shadow. An image file would not take
-  // the shadow's currentColor and --panel fills.
+  // the shadow's currentColor and background color.
   function botIcon() {
     const ns = "http://www.w3.org/2000/svg";
     const shape = "M228.541 114.228C228.541 130.133 225.184 145.994 218.738 160.534C212.674 174.217 203.904 186.669 193.065 196.988C155.933 232.34 99.497 238.596 55.5255 212.24C45.097 205.99 35.6851 198.072 27.7451 188.866C19.1926 178.953 12.3686 167.569 7.65781 155.351C2.60712 142.264 0 128.257 0 114.228C0 98.3219 3.35751 82.4611 9.80315 67.9215C15.8672 54.2382 24.6377 41.7862 35.4767 31.4668C72.6081 -3.88483 129.044 -10.1413 173.016 16.2153C183.444 22.4653 192.856 30.3829 200.796 39.5896C209.349 49.5018 216.173 60.8859 220.883 73.1037C225.934 86.1906 228.541 100.198 228.541 114.228Z";
@@ -93,47 +99,19 @@ var unmountBotPicker;
     if (choice) {
       choice.setAttribute("aria-expanded", "false");
     }
-  }
-
-  function pageScheme() {
-    const root = document.documentElement;
-    if (!root) {
-      return "dark";
-    }
-    // Grok keeps scheme-light in the class list and adds dark for its dark theme.
-    if (root.classList.contains("dark")) {
-      return "dark";
-    }
-    if (root.classList.contains("scheme-light") || root.style.colorScheme === "light") {
-      return "light";
-    }
-    try {
-      if (window.matchMedia("(prefers-color-scheme: light)").matches) {
-        return "light";
+    // The field sits in the menu. Leaving it focused would keep typing into
+    // a hidden box after the menu closes.
+    const filterFocused = filterInput && filterInput.matches(":focus");
+    if (query || (filterInput && filterInput.value)) {
+      query = "";
+      if (filterInput) {
+        filterInput.value = "";
       }
-    } catch (error) {}
-    return "dark";
-  }
-
-  function syncScheme() {
-    if (!host) {
-      return;
+      presentFilter();
     }
-    host.dataset.scheme = pageScheme();
-  }
-
-  function watchScheme() {
-    if (schemeObserver || !document.documentElement) {
-      return;
+    if (filterFocused) {
+      filterInput.blur();
     }
-    schemeObserver = new MutationObserver(syncScheme);
-    schemeObserver.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["class", "style"],
-    });
-    try {
-      window.matchMedia("(prefers-color-scheme: light)").addEventListener("change", syncScheme);
-    } catch (error) {}
   }
 
   function stopNavWatch() {
@@ -167,6 +145,60 @@ var unmountBotPicker;
 
   function optionLabel(bot) {
     return bot.hidden ? bot.name + " (hidden)" : bot.name;
+  }
+
+  // "Jose" matches "José". Combining marks and case are not part of the query.
+  function fold(value) {
+    return value.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().trim();
+  }
+
+  function filterGroups(groups, text) {
+    const folded = fold(text || "");
+    const ids = [];
+    for (const group of groups) {
+      for (const bot of group.bots) {
+        if (!folded || fold(optionLabel(bot)).includes(folded)) {
+          ids.push(bot.id);
+        }
+      }
+    }
+    return {
+      ids: ids,
+      empty: !!folded && !ids.length,
+      onlyId: ids.length === 1 ? ids[0] : "",
+    };
+  }
+
+  function setQuery(value) {
+    const next = typeof value === "string" ? value : "";
+    if (next === query) {
+      return;
+    }
+    query = next;
+    presentFilter();
+  }
+
+  function openOnlyMatch() {
+    const id = filterGroups(menuRows, query).onlyId;
+    if (id) {
+      openBot(id);
+    }
+  }
+
+  // grok.com listens for keys on the page. Outside this closed shadow the
+  // target is the host, so the first character moves focus to the composer.
+  // This runs at document_start, before that listener.
+  function shieldField(event) {
+    if (!filterInput || !menu || menu.hidden || !filterInput.matches(":focus")) {
+      return false;
+    }
+    event.stopPropagation();
+    return true;
+  }
+
+  // Enter ends an IME composition. keyCode 229 is that key while it is still open.
+  function composing(event) {
+    return event.isComposing || event.keyCode === 229;
   }
 
   function botRows(value) {
@@ -304,44 +336,29 @@ var unmountBotPicker;
     return groups;
   }
 
+  // A name or Choose... means the menu can open. Keep Loading... until the
+  // roster has something to show, including while a bot is being restored.
+  function choiceText(active) {
+    for (const bot of roster) {
+      if (bot.id === active) {
+        return optionLabel(bot);
+      }
+    }
+    if (!roster.length) {
+      return rosterKnown ? "No bots" : "Loading...";
+    }
+    return "Choose...";
+  }
+
   function showChoice(active) {
     if (navigating || !label) {
       return;
     }
-    const match = roster.find(function (bot) {
-      return bot.id === active;
-    });
-    if (match) {
-      label.textContent = optionLabel(match);
-      return;
-    }
-    // A name or Choose... means the menu can open. Keep Loading... until the
-    // roster has something to show, including while a bot is being restored.
-    if (!roster.length) {
-      label.textContent = rosterKnown ? "No bots" : "Loading...";
-      return;
-    }
-    label.textContent = "Choose...";
+    label.textContent = choiceText(active);
   }
 
-  function paint() {
-    if (!choice || !menu) {
-      return;
-    }
-    const active = activeBotId();
-    showChoice(active);
-    // An empty roster is still loading, or the account has no bots.
-    // Either way the menu has nothing to show, so the button stays shut.
-    choice.disabled = !roster.length;
-    if (!roster.length) {
-      menu.replaceChildren();
-      menu.dataset.bots = "";
-      menu.dataset.active = "";
-      closeMenu();
-      return;
-    }
-    const groups = menuGroups();
-    const signature = groups
+  function groupSignature(groups) {
+    return groups
       .map(function (group) {
         return (
           group.title +
@@ -354,13 +371,16 @@ var unmountBotPicker;
         );
       })
       .join("\n\n");
+  }
+
+  function renderRoster(active) {
+    const groups = menuGroups();
+    const signature = groupSignature(groups);
     if (menu.dataset.bots === signature && menu.dataset.active === active) {
       return;
     }
-    if (!menu.hidden) {
-      return;
-    }
-    menu.replaceChildren();
+    menuRows = groups;
+    rosterBox.replaceChildren();
     for (const group of groups) {
       const section = document.createElement("div");
       section.className = "section";
@@ -381,10 +401,68 @@ var unmountBotPicker;
         }
         section.appendChild(button);
       }
-      menu.appendChild(section);
+      rosterBox.appendChild(section);
     }
     menu.dataset.bots = signature;
     menu.dataset.active = active;
+  }
+
+  function presentFilter() {
+    if (!rosterBox) {
+      return;
+    }
+    const result = filterGroups(menuRows, query);
+    const visible = new Set(result.ids);
+    const blocks = rosterBox.querySelectorAll(".section");
+    for (const section of blocks) {
+      let shown = 0;
+      const buttons = section.querySelectorAll("button");
+      for (const button of buttons) {
+        const match = visible.has(button.dataset.id || "");
+        button.hidden = !match;
+        if (match) {
+          shown += 1;
+        }
+      }
+      section.hidden = shown === 0;
+    }
+    rosterBox.hidden = result.empty;
+    if (filterEmpty) {
+      filterEmpty.hidden = !result.empty;
+    }
+  }
+
+  function paint() {
+    if (!choice || !menu || !rosterBox) {
+      return;
+    }
+    const active = activeBotId();
+    showChoice(active);
+    // An empty roster is still loading, or the account has no bots.
+    // Either way the menu has nothing to show, so the button stays shut.
+    choice.disabled = !roster.length;
+    if (!roster.length) {
+      query = "";
+      if (filterInput) {
+        filterInput.value = "";
+      }
+      menuRows = [];
+      rosterBox.replaceChildren();
+      rosterBox.hidden = false;
+      if (filterEmpty) {
+        filterEmpty.hidden = true;
+      }
+      menu.dataset.bots = "";
+      menu.dataset.active = "";
+      closeMenu();
+      return;
+    }
+    // A roster refresh must not rebuild the open menu under the search.
+    if (!menu.hidden) {
+      return;
+    }
+    renderRoster(active);
+    presentFilter();
   }
 
   function acceptBots(bots, settled, layout) {
@@ -467,20 +545,6 @@ var unmountBotPicker;
     host = shadow.host;
     const style = document.createElement("style");
     style.textContent = [
-      ":host {",
-      "  --panel: #171716;",
-      "  --ink: #f5f5f5;",
-      "  --muted: #8d8d8a;",
-      "  --line: #333;",
-      "  --hover: #2a2a2a;",
-      "}",
-      ":host([data-scheme='light']) {",
-      "  --panel: #f4f1f0;",
-      "  --ink: #171717;",
-      "  --muted: #736e6b;",
-      "  --line: #e4dfdd;",
-      "  --hover: #e7e2e0;",
-      "}",
       ".bar {",
       "  position: relative;",
       "  box-sizing: border-box;",
@@ -489,10 +553,10 @@ var unmountBotPicker;
       "  align-items: center;",
       "  gap: 4px;",
       "  padding: 0 10px;",
-      "  background: var(--panel);",
-      "  color: var(--ink);",
+      "  background: var(--background);",
+      "  color: var(--text);",
       '  font: 13px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;',
-      "  border-top: 1px solid var(--line);",
+      "  border-top: 1px solid var(--border);",
       "}",
       "button {",
       "  font: inherit;",
@@ -508,7 +572,7 @@ var unmountBotPicker;
       "}",
       ".mark svg { width: 16px; height: 16px; display: block; }",
       ".mark svg .body { fill: currentColor; }",
-      ".mark svg .eye { fill: var(--panel); }",
+      ".mark svg .eye { fill: var(--background); }",
       ".slot {",
       "  position: relative;",
       "  flex: 0 0 120px;",
@@ -545,26 +609,58 @@ var unmountBotPicker;
       "  bottom: 100%;",
       "  width: min(200px, calc(100% - 20px));",
       "  box-sizing: border-box;",
+      "  display: flex;",
+      "  flex-direction: column;",
       "  max-height: min(420px, calc(100dvh - 52px));",
+      "  overflow: hidden;",
+      "  background: var(--background);",
+      "  color: var(--text);",
+      '  font: 13px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;',
+      "  border: 1px solid var(--border);",
+      "  border-bottom: 0;",
+      "  border-radius: 10px 10px 0 0;",
+      "}",
+      "/* display:flex overrides the hidden attribute, which would leave the search showing. */",
+      ".menu[hidden] { display: none !important; }",
+      ".roster {",
+      "  flex: 1 1 auto;",
+      "  min-height: 0;",
+      "  display: flex;",
+      "  flex-direction: column;",
+      "  gap: 6px;",
       "  overflow: auto;",
       "  overscroll-behavior: contain;",
       "  scrollbar-width: thin;",
-      "  scrollbar-color: var(--line) transparent;",
+      "  scrollbar-color: var(--border) transparent;",
       "  padding: 4px;",
-      "  background: var(--panel);",
-      "  color: var(--ink);",
-      '  font: 13px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;',
-      "  border: 1px solid var(--line);",
-      "  border-bottom: 0;",
-      "  border-radius: 10px 10px 0 0;",
-      "  box-shadow: 0 -10px 28px rgba(0, 0, 0, 0.28);",
       "}",
+      ".roster[hidden], .section[hidden], .menu button[hidden], .empty[hidden] {",
+      "  display: none;",
+      "}",
+      ".empty {",
+      "  padding: 6px 12px;",
+      "  color: var(--muted-text);",
+      "}",
+      ".filter {",
+      "  flex: 0 0 auto;",
+      "  box-sizing: border-box;",
+      "  width: auto;",
+      "  min-width: 0;",
+      "  margin: 6px;",
+      "  padding: 6px 10px;",
+      "  appearance: none;",
+      "  background: var(--input-background);",
+      "  border: 1px solid var(--input-border);",
+      "  border-radius: 10px;",
+      "  color: var(--text);",
+      "  caret-color: var(--text);",
+      "  font: inherit;",
+      "  outline: 0;",
+      "}",
+      ".filter::placeholder { color: var(--muted-text); }",
       ".section {",
       "  display: flex;",
       "  flex-direction: column;",
-      "}",
-      ".section + .section {",
-      "  margin-top: 6px;",
       "}",
       ".menu .group {",
       "  padding: 6px 8px 2px;",
@@ -575,7 +671,7 @@ var unmountBotPicker;
       "  letter-spacing: 0.04em;",
       "  white-space: nowrap;",
       "  text-overflow: ellipsis;",
-      "  color: var(--muted);",
+      "  color: var(--muted-text);",
       "}",
       ".menu button {",
       "  display: block;",
@@ -589,7 +685,7 @@ var unmountBotPicker;
       "  border-radius: 6px;",
       "  text-align: left;",
       "}",
-      ".menu button:hover, .menu button[aria-selected='true'] { background: var(--hover); }",
+      ".menu button:hover, .menu button[aria-selected='true'] { background: var(--hover-background); }",
       ".menu button[aria-selected='true'] { font-weight: 600; }",
     ].join("\n");
     const bar = document.createElement("div");
@@ -616,6 +712,9 @@ var unmountBotPicker;
       if (menu.hidden) {
         menu.hidden = false;
         button.setAttribute("aria-expanded", "true");
+        if (filterInput) {
+          filterInput.focus({ preventScroll: true });
+        }
       } else {
         closeMenu();
       }
@@ -625,22 +724,80 @@ var unmountBotPicker;
     const list = document.createElement("div");
     list.className = "menu";
     list.hidden = true;
-    list.setAttribute("role", "listbox");
-    list.addEventListener("click", function (event) {
+    const bots = document.createElement("div");
+    bots.className = "roster";
+    bots.setAttribute("role", "listbox");
+    bots.addEventListener("click", function (event) {
       const item = event.target.closest("button");
-      if (!item || !list.contains(item)) {
+      if (!item || !bots.contains(item)) {
         return;
       }
       openBot(item.dataset.id || "");
     });
+    const none = document.createElement("div");
+    none.className = "empty";
+    none.hidden = true;
+    none.textContent = "No matches";
+    const filter = document.createElement("input");
+    filter.className = "filter";
+    filter.type = "search";
+    filter.placeholder = "Search...";
+    filter.setAttribute("aria-label", "Search bots");
+    filter.autocomplete = "off";
+    filter.spellcheck = false;
+    // Closed shadow retargets these keys to the host. grok.com then treats
+    // them as page keys and moves focus to the composer after the first one.
+    function keepKey(event) {
+      event.stopPropagation();
+    }
+    filter.addEventListener("input", function (event) {
+      keepKey(event);
+      setQuery(filter.value);
+    });
+    for (const type of ["keyup", "keypress", "beforeinput", "compositionstart", "compositionupdate", "compositionend"]) {
+      filter.addEventListener(type, keepKey);
+    }
+    filter.addEventListener("blur", function (event) {
+      if (!menu || menu.hidden) {
+        return;
+      }
+      const next = event.relatedTarget;
+      if (next && next.getRootNode && next.getRootNode() === filter.getRootNode()) {
+        return;
+      }
+      queueMicrotask(function () {
+        if (!filterInput || !menu || menu.hidden || filterInput.matches(":focus")) {
+          return;
+        }
+        filterInput.focus({ preventScroll: true });
+      });
+    });
+    filter.addEventListener("keydown", function (event) {
+      keepKey(event);
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeMenu();
+        if (choice) {
+          choice.focus({ preventScroll: true });
+        }
+        return;
+      }
+      if (event.key !== "Enter" || composing(event)) {
+        return;
+      }
+      event.preventDefault();
+      openOnlyMatch();
+    });
+    list.append(bots, none, filter);
     slot.append(button);
     bar.append(slot, list);
     shadow.append(style, bar);
     choice = button;
     label = name;
     menu = list;
-    watchScheme();
-    syncScheme();
+    rosterBox = bots;
+    filterInput = filter;
+    filterEmpty = none;
     if (!roster.length && !rosterKnown) {
       const cached = readRoster();
       if (cached.bots.length) {
@@ -657,8 +814,42 @@ var unmountBotPicker;
     choice = null;
     label = null;
     menu = null;
+    rosterBox = null;
+    filterInput = null;
+    filterEmpty = null;
+    menuRows = [];
+    query = "";
     host = null;
   };
+
+  window.addEventListener("keydown", function (event) {
+    if (!shieldField(event)) {
+      return;
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeMenu();
+      if (choice) {
+        choice.focus({ preventScroll: true });
+      }
+      return;
+    }
+    if (event.key === "Enter" && !composing(event)) {
+      event.preventDefault();
+      openOnlyMatch();
+    }
+  }, true);
+  for (const type of ["keyup", "keypress", "beforeinput"]) {
+    window.addEventListener(type, shieldField, true);
+  }
+  window.addEventListener("input", function (event) {
+    if (!shieldField(event)) {
+      return;
+    }
+    // The key was stopped before it reached the field, so the field's own
+    // input listener does not run. The value is already in the field.
+    setQuery(filterInput ? filterInput.value : "");
+  }, true);
 
   window.addEventListener("message", function (event) {
     const data = botsMessage(event);
