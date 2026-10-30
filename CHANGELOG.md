@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.4.0 — 2026-10-31
+
+- Added search to the bot picker.
+- Fixed selecting the same bot after going to Grok's home page.
+
 ## 1.3.4 — 2026-10-29
 
 Opening the drawer on a bot conversation no longer shows a load error.
