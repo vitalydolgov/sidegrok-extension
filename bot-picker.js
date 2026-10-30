@@ -19,6 +19,10 @@ var unmountBotPicker;
   let pinned = [];
   let sections = [];
   let rosterKnown = false;
+  // Rows the menu was built from. Search filters these, so a roster refresh
+  // does not swap the list under an open menu.
+  let menuRows = [];
+  let query = "";
   let navigating = false;
   let navWatch = 0;
 
@@ -99,9 +103,12 @@ var unmountBotPicker;
     // The field sits in the menu. Leaving it focused would keep typing into
     // a hidden box after the menu closes.
     const filterFocused = filterInput && filterInput.matches(":focus");
-    if (filterInput && filterInput.value) {
-      filterInput.value = "";
-      applyFilter();
+    if (query || (filterInput && filterInput.value)) {
+      query = "";
+      if (filterInput) {
+        filterInput.value = "";
+      }
+      presentFilter();
     }
     if (filterFocused) {
       filterInput.blur();
@@ -187,6 +194,40 @@ var unmountBotPicker;
     return value.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().trim();
   }
 
+  // Which of these rows match. The menu does not decide this.
+  function filterGroups(groups, text) {
+    const folded = fold(text || "");
+    const ids = [];
+    for (const group of groups) {
+      for (const bot of group.bots) {
+        if (!folded || fold(optionLabel(bot)).includes(folded)) {
+          ids.push(bot.id);
+        }
+      }
+    }
+    return {
+      ids: ids,
+      empty: !!folded && !ids.length,
+      onlyId: ids.length === 1 ? ids[0] : "",
+    };
+  }
+
+  function setQuery(value) {
+    const next = typeof value === "string" ? value : "";
+    if (next === query) {
+      return;
+    }
+    query = next;
+    presentFilter();
+  }
+
+  function openOnlyMatch() {
+    const id = filterGroups(menuRows, query).onlyId;
+    if (id) {
+      openBot(id);
+    }
+  }
+
   // grok.com listens for keys on the page. Outside this closed shadow the
   // target is the host, so the first character moves focus to the composer.
   // This runs at document_start, before that listener.
@@ -196,49 +237,6 @@ var unmountBotPicker;
     }
     event.stopPropagation();
     return true;
-  }
-
-  function openOnlyMatch() {
-    if (!rosterBox) {
-      return;
-    }
-    const visible = [];
-    const buttons = rosterBox.querySelectorAll("button");
-    for (const item of buttons) {
-      if (!item.hidden) {
-        visible.push(item);
-      }
-    }
-    if (visible.length !== 1) {
-      return;
-    }
-    openBot(visible[0].dataset.id || "");
-  }
-
-  function applyFilter() {
-    if (!rosterBox) {
-      return;
-    }
-    const query = fold(filterInput ? filterInput.value : "");
-    let shown = 0;
-    const sections = rosterBox.querySelectorAll(".section");
-    for (const section of sections) {
-      let sectionShown = 0;
-      const buttons = section.querySelectorAll("button");
-      for (const button of buttons) {
-        const match = !query || fold(button.textContent || "").includes(query);
-        button.hidden = !match;
-        if (match) {
-          sectionShown += 1;
-        }
-      }
-      section.hidden = sectionShown === 0;
-      shown += sectionShown;
-    }
-    rosterBox.hidden = !!query && shown === 0;
-    if (filterEmpty) {
-      filterEmpty.hidden = !query || shown > 0;
-    }
   }
 
   function botRows(value) {
@@ -376,44 +374,29 @@ var unmountBotPicker;
     return groups;
   }
 
+  // A name or Choose... means the menu can open. Keep Loading... until the
+  // roster has something to show, including while a bot is being restored.
+  function choiceText(active) {
+    for (const bot of roster) {
+      if (bot.id === active) {
+        return optionLabel(bot);
+      }
+    }
+    if (!roster.length) {
+      return rosterKnown ? "No bots" : "Loading...";
+    }
+    return "Choose...";
+  }
+
   function showChoice(active) {
     if (navigating || !label) {
       return;
     }
-    const match = roster.find(function (bot) {
-      return bot.id === active;
-    });
-    if (match) {
-      label.textContent = optionLabel(match);
-      return;
-    }
-    // A name or Choose... means the menu can open. Keep Loading... until the
-    // roster has something to show, including while a bot is being restored.
-    if (!roster.length) {
-      label.textContent = rosterKnown ? "No bots" : "Loading...";
-      return;
-    }
-    label.textContent = "Choose...";
+    label.textContent = choiceText(active);
   }
 
-  function paint() {
-    if (!choice || !menu || !rosterBox) {
-      return;
-    }
-    const active = activeBotId();
-    showChoice(active);
-    // An empty roster is still loading, or the account has no bots.
-    // Either way the menu has nothing to show, so the button stays shut.
-    choice.disabled = !roster.length;
-    if (!roster.length) {
-      rosterBox.replaceChildren();
-      menu.dataset.bots = "";
-      menu.dataset.active = "";
-      closeMenu();
-      return;
-    }
-    const groups = menuGroups();
-    const signature = groups
+  function groupSignature(groups) {
+    return groups
       .map(function (group) {
         return (
           group.title +
@@ -426,12 +409,15 @@ var unmountBotPicker;
         );
       })
       .join("\n\n");
+  }
+
+  function renderRoster(active) {
+    const groups = menuGroups();
+    const signature = groupSignature(groups);
     if (menu.dataset.bots === signature && menu.dataset.active === active) {
       return;
     }
-    if (!menu.hidden) {
-      return;
-    }
+    menuRows = groups;
     rosterBox.replaceChildren();
     for (const group of groups) {
       const section = document.createElement("div");
@@ -457,7 +443,65 @@ var unmountBotPicker;
     }
     menu.dataset.bots = signature;
     menu.dataset.active = active;
-    applyFilter();
+  }
+
+  // Show the ids filterGroups returned. Matching itself stays in the roster data.
+  function presentFilter() {
+    if (!rosterBox) {
+      return;
+    }
+    const result = filterGroups(menuRows, query);
+    const visible = new Set(result.ids);
+    const blocks = rosterBox.querySelectorAll(".section");
+    for (const section of blocks) {
+      let shown = 0;
+      const buttons = section.querySelectorAll("button");
+      for (const button of buttons) {
+        const match = visible.has(button.dataset.id || "");
+        button.hidden = !match;
+        if (match) {
+          shown += 1;
+        }
+      }
+      section.hidden = shown === 0;
+    }
+    rosterBox.hidden = result.empty;
+    if (filterEmpty) {
+      filterEmpty.hidden = !result.empty;
+    }
+  }
+
+  function paint() {
+    if (!choice || !menu || !rosterBox) {
+      return;
+    }
+    const active = activeBotId();
+    showChoice(active);
+    // An empty roster is still loading, or the account has no bots.
+    // Either way the menu has nothing to show, so the button stays shut.
+    choice.disabled = !roster.length;
+    if (!roster.length) {
+      query = "";
+      if (filterInput) {
+        filterInput.value = "";
+      }
+      menuRows = [];
+      rosterBox.replaceChildren();
+      rosterBox.hidden = false;
+      if (filterEmpty) {
+        filterEmpty.hidden = true;
+      }
+      menu.dataset.bots = "";
+      menu.dataset.active = "";
+      closeMenu();
+      return;
+    }
+    // A roster refresh must not rebuild the open menu under the search.
+    if (!menu.hidden) {
+      return;
+    }
+    renderRoster(active);
+    presentFilter();
   }
 
   function acceptBots(bots, settled, layout) {
@@ -764,7 +808,7 @@ var unmountBotPicker;
     }
     filter.addEventListener("input", function (event) {
       keepKey(event);
-      applyFilter();
+      setQuery(filter.value);
     });
     for (const type of ["keyup", "keypress", "beforeinput", "compositionstart", "compositionupdate", "compositionend"]) {
       filter.addEventListener(type, keepKey);
@@ -831,6 +875,7 @@ var unmountBotPicker;
     rosterBox = null;
     filterInput = null;
     filterEmpty = null;
+    menuRows = [];
     host = null;
   };
 
@@ -859,8 +904,8 @@ var unmountBotPicker;
       return;
     }
     // The key was stopped before it reached the field, so the field's own
-    // input listener does not run.
-    applyFilter();
+    // input listener does not run. The value is already in the field.
+    setQuery(filterInput ? filterInput.value : "");
   }, true);
 
   window.addEventListener("message", function (event) {
