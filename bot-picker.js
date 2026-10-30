@@ -152,7 +152,6 @@ var unmountBotPicker;
     return value.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().trim();
   }
 
-  // Which of these rows match. The menu does not decide this.
   function filterGroups(groups, text) {
     const folded = fold(text || "");
     const ids = [];
@@ -195,6 +194,11 @@ var unmountBotPicker;
     }
     event.stopPropagation();
     return true;
+  }
+
+  // Enter ends an IME composition. keyCode 229 is that key while it is still open.
+  function composing(event) {
+    return event.isComposing || event.keyCode === 229;
   }
 
   function botRows(value) {
@@ -403,7 +407,6 @@ var unmountBotPicker;
     menu.dataset.active = active;
   }
 
-  // Show the ids filterGroups returned. Matching itself stays in the roster data.
   function presentFilter() {
     if (!rosterBox) {
       return;
@@ -642,6 +645,7 @@ var unmountBotPicker;
       "  flex: 0 0 auto;",
       "  box-sizing: border-box;",
       "  width: auto;",
+      "  min-width: 0;",
       "  margin: 6px;",
       "  padding: 6px 10px;",
       "  appearance: none;",
@@ -778,7 +782,7 @@ var unmountBotPicker;
         }
         return;
       }
-      if (event.key !== "Enter") {
+      if (event.key !== "Enter" || composing(event)) {
         return;
       }
       event.preventDefault();
@@ -814,6 +818,7 @@ var unmountBotPicker;
     filterInput = null;
     filterEmpty = null;
     menuRows = [];
+    query = "";
     host = null;
   };
 
@@ -829,7 +834,7 @@ var unmountBotPicker;
       }
       return;
     }
-    if (event.key === "Enter") {
+    if (event.key === "Enter" && !composing(event)) {
       event.preventDefault();
       openOnlyMatch();
     }
