@@ -616,7 +616,6 @@ var unmountBotPicker;
       "  border: 1px solid var(--border);",
       "  border-bottom: 0;",
       "  border-radius: 10px 10px 0 0;",
-      "  box-shadow: 0 -10px 28px rgba(0, 0, 0, 0.28);",
       "}",
       "/* display:flex overrides the hidden attribute, which would leave the search showing. */",
       ".menu[hidden] { display: none !important; }",
